@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'providers/app_state.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/butler_screen.dart';
 import 'screens/refund_screen.dart';
 
-void main() {
+Future<void> main() async {
   // 앱 실행 전 바인딩 초기화
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // .env 로드
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("Warning: Could not load .env file: $e");
+  }
   
   // 파이어베이스 연동 및 기타 초기화가 실제 키 없이도 통과하도록 연출
   runApp(
