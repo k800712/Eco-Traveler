@@ -105,29 +105,29 @@ class MockServices {
         }
       }
 
-      // 2) KTO 국문 관광정보 서비스(KorService1) areaBasedList1 API 호출 구성 (공공데이터포털 이중인코딩 방지용 강제 쿼리스트링 조합)
-      String rawUrl = 'https://apis.data.go.kr/B551011/KorService1/areaBasedList1'
-          '?serviceKey=$apiKey'
-          '&MobileOS=ETC'
-          '&MobileApp=EcoTraveler'
-          '&_type=json'
-          '&areaCode=${nearestRegion.areaCode}'
-          '&contentTypeId=12'
-          '&numOfRows=5'
-          '&pageNo=1'
-          '&listYN=Y'
-          '&arrange=O';
-
-      if (nearestRegion.sigunguCode > 0) {
-        rawUrl += '&sigunguCode=${nearestRegion.sigunguCode}';
-      }
-
-      final Uri requestUri = Uri.parse(rawUrl);
-      debugPrint('TourAPI_Request: Sending GET to ${rawUrl.substring(0, min(80, rawUrl.length))}...');
+      // 2) KTO 국문 관광정보 서비스(KorService1) areaBasedList1 API 호출 구성 (인코딩된 오리지널 키 강제 송출용 Uri 생성자 활용)
+      final Uri requestUri = Uri(
+        scheme: 'https',
+        host: 'apis.data.go.kr',
+        path: '/B551011/KorService1/areaBasedList1',
+        query: 'serviceKey=$apiKey'
+            '&MobileOS=ETC'
+            '&MobileApp=EcoTraveler'
+            '&_type=json'
+            '&areaCode=${nearestRegion.areaCode}'
+            '&contentTypeId=12'
+            '&numOfRows=5'
+            '&pageNo=1'
+            '&listYN=Y'
+            '&arrange=O'
+            '${nearestRegion.sigunguCode > 0 ? "&sigunguCode=${nearestRegion.sigunguCode}" : ""}',
+      );
+      debugPrint('TourAPI_Request: Sending GET to ${requestUri.toString().substring(0, min(80, requestUri.toString().length))}...');
 
       final http.Response response = await http.get(requestUri).timeout(const Duration(seconds: 5));
 
       if (response.statusCode != 200) {
+        debugPrint('TourAPI_ErrorBody: ${utf8.decode(response.bodyBytes)}');
         throw Exception('API Server responded with status code: ${response.statusCode}');
       }
 
@@ -157,17 +157,19 @@ class MockServices {
         final int tollFee = distance > 10.0 ? (distance * 48).round() : 0;
         final int publicTransitFee = (distance * 85 + 1400).round();
 
-        // 무장애 정보 수집을 위한 API 호출 (공공데이터포털 이중인코딩 방지용 강제 쿼리스트링 조합)
+        // 무장애 정보 수집을 위한 API 호출 (인코딩된 오리지널 키 강제 송출용 Uri 생성자 활용)
         String accessibilityInfo = '♿️ 기본 휠체어 접근성 구비';
         try {
-          final String rawBfUrl = 'https://apis.data.go.kr/B551011/KorWithBarrierFreeService1/detailWithTour1'
-              '?serviceKey=$apiKey'
-              '&MobileOS=ETC'
-              '&MobileApp=EcoTraveler'
-              '&_type=json'
-              '&contentId=$contentId';
-
-          final Uri bfUri = Uri.parse(rawBfUrl);
+          final Uri bfUri = Uri(
+            scheme: 'https',
+            host: 'apis.data.go.kr',
+            path: '/B551011/KorWithBarrierFreeService1/detailWithTour1',
+            query: 'serviceKey=$apiKey'
+                '&MobileOS=ETC'
+                '&MobileApp=EcoTraveler'
+                '&_type=json'
+                '&contentId=$contentId',
+          );
 
           final http.Response bfResponse = await http.get(bfUri).timeout(const Duration(seconds: 3));
           if (bfResponse.statusCode == 200) {
