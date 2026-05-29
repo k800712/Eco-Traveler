@@ -105,28 +105,25 @@ class MockServices {
         }
       }
 
-      // 2) KTO 국문 관광정보 서비스(KorService1) areaBasedList1 API 호출 구성
-      final String baseUrl = 'https://apis.data.go.kr/B551011/KorService1/areaBasedList1';
-      final Map<String, String> queryParams = {
-        'serviceKey': apiKey,
-        'MobileOS': 'ETC',
-        'MobileApp': 'EcoTraveler',
-        '_type': 'json',
-        'areaCode': nearestRegion.areaCode.toString(),
-        'contentTypeId': '12', // 자연 관광지 중심 수집
-        'numOfRows': '5',      // 최적화된 API 처리를 위해 상위 5개 수집
-        'pageNo': '1',
-        'listYN': 'Y',
-        'arrange': 'O',        // 제목순 정렬
-      };
+      // 2) KTO 국문 관광정보 서비스(KorService1) areaBasedList1 API 호출 구성 (공공데이터포털 이중인코딩 방지용 강제 쿼리스트링 조합)
+      String rawUrl = 'https://apis.data.go.kr/B551011/KorService1/areaBasedList1'
+          '?serviceKey=$apiKey'
+          '&MobileOS=ETC'
+          '&MobileApp=EcoTraveler'
+          '&_type=json'
+          '&areaCode=${nearestRegion.areaCode}'
+          '&contentTypeId=12'
+          '&numOfRows=5'
+          '&pageNo=1'
+          '&listYN=Y'
+          '&arrange=O';
 
-      // 시군구 코드가 정의되어 있으면 추가
       if (nearestRegion.sigunguCode > 0) {
-        queryParams['sigunguCode'] = nearestRegion.sigunguCode.toString();
+        rawUrl += '&sigunguCode=${nearestRegion.sigunguCode}';
       }
 
-      final Uri requestUri = Uri.parse(baseUrl).replace(queryParameters: queryParams);
-      debugPrint('TourAPI_Request: Sending GET to ${requestUri.toString().substring(0, 80)}...');
+      final Uri requestUri = Uri.parse(rawUrl);
+      debugPrint('TourAPI_Request: Sending GET to ${rawUrl.substring(0, min(80, rawUrl.length))}...');
 
       final http.Response response = await http.get(requestUri).timeout(const Duration(seconds: 5));
 
@@ -160,17 +157,17 @@ class MockServices {
         final int tollFee = distance > 10.0 ? (distance * 48).round() : 0;
         final int publicTransitFee = (distance * 85 + 1400).round();
 
-        // 무장애 정보 수집을 위한 API 호출
+        // 무장애 정보 수집을 위한 API 호출 (공공데이터포털 이중인코딩 방지용 강제 쿼리스트링 조합)
         String accessibilityInfo = '♿️ 기본 휠체어 접근성 구비';
         try {
-          final String bfUrl = 'https://apis.data.go.kr/B551011/KorWithBarrierFreeService1/detailWithTour1';
-          final Uri bfUri = Uri.parse(bfUrl).replace(queryParameters: {
-            'serviceKey': apiKey,
-            'MobileOS': 'ETC',
-            'MobileApp': 'EcoTraveler',
-            '_type': 'json',
-            'contentId': contentId,
-          });
+          final String rawBfUrl = 'https://apis.data.go.kr/B551011/KorWithBarrierFreeService1/detailWithTour1'
+              '?serviceKey=$apiKey'
+              '&MobileOS=ETC'
+              '&MobileApp=EcoTraveler'
+              '&_type=json'
+              '&contentId=$contentId';
+
+          final Uri bfUri = Uri.parse(rawBfUrl);
 
           final http.Response bfResponse = await http.get(bfUri).timeout(const Duration(seconds: 3));
           if (bfResponse.statusCode == 200) {
