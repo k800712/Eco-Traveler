@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'providers/app_state.dart';
+import 'services/web_communication.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/butler_screen.dart';
@@ -22,7 +23,11 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppState()),
+        ChangeNotifierProvider(create: (_) {
+          final state = AppState();
+          WebCommunication.init(state);
+          return state;
+        }),
       ],
       child: const EcoTravelerApp(),
     ),

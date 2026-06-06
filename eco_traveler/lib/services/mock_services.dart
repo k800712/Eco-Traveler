@@ -50,6 +50,9 @@ class RegionMapping {
 }
 
 class MockServices {
+  // TourAPI 실시간 연결 성공 여부 플래그
+  static bool isTourApiRealConnected = false;
+
   // ① 대상 리워드 우대 지역 및 매핑 테이블 정의
   static final List<RegionMapping> _regions = [
     RegionMapping(name: '단양', areaCode: 33, sigunguCode: 3, latitude: 36.9845, longitude: 128.3650, weight: 2.0),
@@ -66,11 +69,45 @@ class MockServices {
     return 12742 * asin(sqrt(a)); // 지구 지름 12742km 기반 반환
   }
 
-  // 1. 오피넷 실시간 평균 유가 모킹 (원/L)
+  // 1. 오피넷 실시간 평균 유가 실제 연동 및 하이브리드 Fallback 구현 (원/L)
   static Future<double> getAverageFuelPrice() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    // 1620원 ~ 1680원 사이 실시간 무작위 유가 반환
-    return 1620.0 + Random().nextInt(60);
+    final String? apiKey = dotenv.env['OPINET_API_KEY'];
+    final double defaultPrice = double.tryParse(dotenv.env['BASE_FUEL_PRICE'] ?? '1650.0') ?? 1650.0;
+
+    // API Key가 없거나 모킹 지시 상태이면 즉시 Fallback 작동
+    if (apiKey == null || apiKey.isEmpty || apiKey.startsWith('MOCK_')) {
+      debugPrint('OpinetAPI_Warning: Valid API Key not found. Using default fuel price.');
+      return defaultPrice + Random().nextInt(30) - 15; // 기본값 인근 변동
+    }
+
+    try {
+      final Uri requestUri = Uri.parse('http://www.opinet.co.kr/api/avgAllPrice.do?out=json&code=$apiKey');
+      final http.Response response = await http.get(requestUri).timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> decoded = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final dynamic result = decoded['RESULT'];
+        if (result != null && result['OIL'] is List) {
+          final List<dynamic> oilList = result['OIL'];
+          
+          // 휘발유(B027) 제품 코드 필터링 및 가격 파싱
+          for (var oil in oilList) {
+            if (oil['PRODCD'] == 'B027') {
+              final double? price = double.tryParse(oil['PRICE']?.toString() ?? '');
+              if (price != null && price > 0) {
+                debugPrint('OpinetAPI_Success: Fetched real gasoline price: $price');
+                return price;
+              }
+            }
+          }
+        }
+      }
+      throw Exception('Invalid status code or JSON response format');
+    } catch (e) {
+      debugPrint('OpinetAPI_Error: Real API invocation failed ($e). Falling back to default price.');
+      // 통신 실패 시 기본 유가(BASE_FUEL_PRICE)에 약간의 무작위성을 부여해 반환
+      return defaultPrice + Random().nextInt(30) - 15;
+    }
   }
 
   // 2. 한국관광공사 TourAPI 실제 REST API 연동 및 하이브리드 Fallback 구현
@@ -89,6 +126,7 @@ class MockServices {
     // API 키가 비어있거나 모의 데이터 지시 상태이면 즉시 Fallback 동작 수행
     if (apiKey == null || apiKey.isEmpty || apiKey.startsWith('MOCK_')) {
       debugPrint('TourAPI_Warning: Valid API Key not found. Falling back to Mock local database.');
+      isTourApiRealConnected = false;
       return _getMockFallbackSpots();
     }
 
@@ -105,33 +143,36 @@ class MockServices {
         }
       }
 
-      // 2) KTO 국문 관광정보 서비스(KorService1) areaBasedList1 API 호출 구성 (인코딩된 오리지널 키 강제 송출용 Uri 생성자 활용)
-      final Uri requestUri = Uri(
-        scheme: 'https',
-        host: 'apis.data.go.kr',
-        path: '/B551011/KorService1/areaBasedList1',
-        query: 'serviceKey=$apiKey'
-            '&MobileOS=ETC'
-            '&MobileApp=EcoTraveler'
-            '&_type=json'
-            '&areaCode=${nearestRegion.areaCode}'
-            '&contentTypeId=12'
-            '&numOfRows=5'
-            '&pageNo=1'
-            '&listYN=Y'
-            '&arrange=O'
-            '${nearestRegion.sigunguCode > 0 ? "&sigunguCode=${nearestRegion.sigunguCode}" : ""}',
-      );
+      // 2) 이중 인코딩 방지를 위해 Uri.parse 방식으로 안전하게 raw URL 문자열 구성
+      final String urlStr = 'https://apis.data.go.kr/B551011/KorService1/areaBasedList1'
+          '?serviceKey=$apiKey'
+          '&MobileOS=ETC'
+          '&MobileApp=EcoTraveler'
+          '&_type=json'
+          '&areaCode=${nearestRegion.areaCode}'
+          '&contentTypeId=12'
+          '&numOfRows=5'
+          '&pageNo=1'
+          '&listYN=Y'
+          '&arrange=O'
+          '${nearestRegion.sigunguCode > 0 ? "&sigunguCode=${nearestRegion.sigunguCode}" : ""}';
+
+      final Uri requestUri = Uri.parse(urlStr);
       debugPrint('TourAPI_Request: Sending GET to ${requestUri.toString().substring(0, min(80, requestUri.toString().length))}...');
 
       final http.Response response = await http.get(requestUri).timeout(const Duration(seconds: 5));
 
       if (response.statusCode != 200) {
-        debugPrint('TourAPI_ErrorBody: ${utf8.decode(response.bodyBytes)}');
         throw Exception('API Server responded with status code: ${response.statusCode}');
       }
 
-      final dynamic decodedJson = json.decode(utf8.decode(response.bodyBytes));
+      final String responseBody = utf8.decode(response.bodyBytes);
+      // 공공데이터 포털 서버의 Unexpected errors 에러 감지 처리
+      if (responseBody.contains('Unexpected errors') || responseBody.contains('SERVICE_KEY_IS_NOT_REGISTERED_ERROR')) {
+        throw Exception('API Gateway error: Key is invalid or not registered yet.');
+      }
+
+      final dynamic decodedJson = json.decode(responseBody);
       final dynamic body = decodedJson['response']?['body'];
       if (body == null || body['items'] == null || body['items'] == '') {
         throw Exception('No tourist items found in response for areaCode ${nearestRegion.areaCode}');
@@ -157,41 +198,41 @@ class MockServices {
         final int tollFee = distance > 10.0 ? (distance * 48).round() : 0;
         final int publicTransitFee = (distance * 85 + 1400).round();
 
-        // 무장애 정보 수집을 위한 API 호출 (인코딩된 오리지널 키 강제 송출용 Uri 생성자 활용)
+        // 무장애 정보 수집을 위한 API 호출 (이중 인코딩 방지 Uri.parse 사용)
         String accessibilityInfo = '♿️ 기본 휠체어 접근성 구비';
         try {
-          final Uri bfUri = Uri(
-            scheme: 'https',
-            host: 'apis.data.go.kr',
-            path: '/B551011/KorWithBarrierFreeService1/detailWithTour1',
-            query: 'serviceKey=$apiKey'
-                '&MobileOS=ETC'
-                '&MobileApp=EcoTraveler'
-                '&_type=json'
-                '&contentId=$contentId',
-          );
+          final String bfUrlStr = 'https://apis.data.go.kr/B551011/KorWithBarrierFreeService1/detailWithTour1'
+              '?serviceKey=$apiKey'
+              '&MobileOS=ETC'
+              '&MobileApp=EcoTraveler'
+              '&_type=json'
+              '&contentId=$contentId';
 
+          final Uri bfUri = Uri.parse(bfUrlStr);
           final http.Response bfResponse = await http.get(bfUri).timeout(const Duration(seconds: 3));
           if (bfResponse.statusCode == 200) {
-            final dynamic bfDecoded = json.decode(utf8.decode(bfResponse.bodyBytes));
-            final dynamic bfBody = bfDecoded['response']?['body']?['items']?['item'];
-            if (bfBody != null) {
-              final Map<String, dynamic> bfData = bfBody is List ? bfBody.first : bfBody;
-              
-              // 무장애 편의시설 항목 추출 및 병합
-              final List<String> bfFacil = [];
-              if (bfData['parking'] != null && bfData['parking'].toString().trim().isNotEmpty) {
-                bfFacil.add('주차: ' + bfData['parking'].toString().trim());
-              }
-              if (bfData['wheelchair'] != null && bfData['wheelchair'].toString().trim().isNotEmpty) {
-                bfFacil.add('대여: ' + bfData['wheelchair'].toString().trim());
-              }
-              if (bfData['route'] != null && bfData['route'].toString().trim().isNotEmpty) {
-                bfFacil.add('경사로: ' + bfData['route'].toString().trim());
-              }
-              
-              if (bfFacil.isNotEmpty) {
-                accessibilityInfo = '♿️ ' + bfFacil.take(2).join(' | ');
+            final String bfResponseBody = utf8.decode(bfResponse.bodyBytes);
+            if (!bfResponseBody.contains('Unexpected errors')) {
+              final dynamic bfDecoded = json.decode(bfResponseBody);
+              final dynamic bfBody = bfDecoded['response']?['body']?['items']?['item'];
+              if (bfBody != null) {
+                final Map<String, dynamic> bfData = bfBody is List ? bfBody.first : bfBody;
+                
+                // 무장애 편의시설 항목 추출 및 병합
+                final List<String> bfFacil = [];
+                if (bfData['parking'] != null && bfData['parking'].toString().trim().isNotEmpty) {
+                  bfFacil.add('주차: ' + bfData['parking'].toString().trim());
+                }
+                if (bfData['wheelchair'] != null && bfData['wheelchair'].toString().trim().isNotEmpty) {
+                  bfFacil.add('대여: ' + bfData['wheelchair'].toString().trim());
+                }
+                if (bfData['route'] != null && bfData['route'].toString().trim().isNotEmpty) {
+                  bfFacil.add('경사로: ' + bfData['route'].toString().trim());
+                }
+                
+                if (bfFacil.isNotEmpty) {
+                  accessibilityInfo = '♿️ ' + bfFacil.take(2).join(' | ');
+                }
               }
             }
           }
@@ -220,9 +261,12 @@ class MockServices {
         );
       }
 
+      // API 연동 성공 설정
+      isTourApiRealConnected = true;
       return spots;
     } catch (e) {
       debugPrint('TourAPI_Error: Actual REST API failed ($e). Resorting to local Mock Fallback.');
+      isTourApiRealConnected = false;
       return _getMockFallbackSpots();
     }
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../models/eco_calculator.dart';
+import '../services/pedometer_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -14,29 +15,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoggedIn = true; // 가상 로그인 상태
   bool _isWalking = false;
   int _sessionSteps = 0;
-  
-  // 걸음 수 시뮬레이터 구동 타이머 모사
-  void _toggleWalking(AppState appState) {
-    setState(() {
-      _isWalking = !_isWalking;
-    });
+  String _pedestrianStatus = '🛑 도보 정지 상태';
+  WalkSensorMode _sensorMode = WalkSensorMode.none;
 
-    if (_isWalking) {
-      _sessionSteps = 0;
-      _simulateSteps(appState);
-    }
+  @override
+  void dispose() {
+    PedometerService().stopStepListening();
+    super.dispose();
   }
-
-  void _simulateSteps(AppState appState) async {
-    while (_isWalking) {
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (!mounted || !_isWalking) break;
-      
-      int added = (5 + (10 * (1 - 0.5))).toInt(); // 모의 걸음 수
-      appState.addSteps(added);
+  
+  // 기기 만보기 센서 및 시뮬레이터 분기 연동
+  void _toggleWalking(AppState appState) async {
+    final pedometerService = PedometerService();
+    
+    if (_isWalking) {
+      await pedometerService.stopStepListening();
+      if (!mounted) return;
       setState(() {
-        _sessionSteps += added;
+        _isWalking = false;
+        _pedestrianStatus = '🛑 도보 정지 상태';
+        _sensorMode = WalkSensorMode.none;
       });
+    } else {
+      if (!mounted) return;
+      setState(() {
+        _isWalking = true;
+        _sessionSteps = 0;
+        _pedestrianStatus = '센서 초기화 중...';
+      });
+
+      await pedometerService.startStepListening(
+        onStepCountChanged: (int addedSteps) {
+          if (!mounted || !_isWalking) return;
+          int diff = addedSteps - _sessionSteps;
+          if (diff > 0) {
+            appState.addSteps(diff);
+            setState(() {
+              _sessionSteps = addedSteps;
+            });
+          }
+        },
+        onStatusChanged: (String status) {
+          if (!mounted || !_isWalking) return;
+          setState(() {
+            _pedestrianStatus = status;
+          });
+        },
+        onModeDetermined: (WalkSensorMode mode) {
+          if (!mounted || !_isWalking) return;
+          setState(() {
+            _sensorMode = mode;
+          });
+        },
+      );
     }
   }
 
@@ -207,13 +238,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('🚗 마이카 공인 연비 설정', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 2),
-                        Text('머니백 계산의 기준 연비입니다.', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                      ],
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('🚗 마이카 공인 연비 설정', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          SizedBox(height: 2),
+                          Text('머니백 계산의 기준 연비입니다.', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
                     ),
                     Row(
                       children: [
@@ -280,6 +313,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           )
                       ],
                     ),
+                    if (_isWalking) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _sensorMode == WalkSensorMode.hardware 
+                              ? Colors.blue.withOpacity(0.15) 
+                              : Colors.orange.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _sensorMode == WalkSensorMode.hardware ? Colors.blueAccent : Colors.orangeAccent,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _sensorMode == WalkSensorMode.hardware 
+                                  ? '✅ 물리적 만보기 센서 작동 중' 
+                                  : '💻 시뮬레이션 모드 작동 중',
+                              style: TextStyle(
+                                fontSize: 10, 
+                                color: _sensorMode == WalkSensorMode.hardware ? Colors.blueAccent : Colors.orangeAccent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              _pedestrianStatus,
+                              style: const TextStyle(fontSize: 10, color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     ElevatedButton.icon(
                       onPressed: () => _toggleWalking(appState),
@@ -289,7 +357,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: Icon(_isWalking ? Icons.stop : Icons.play_arrow, color: Colors.white),
-                      label: Text(_isWalking ? '센서 측정 중지' : '실시간 걷기 모의 측정 시작', style: const TextStyle(color: Colors.white)),
+                      label: Text(_isWalking ? '도보 측정 중지' : '실시간 도보 여행 시작 (기기 센서 연동)', style: const TextStyle(color: Colors.white)),
                     ),
                   ],
                 ),
@@ -312,12 +380,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.park, color: Colors.greenAccent),
-                            SizedBox(width: 8),
-                            Text('탄소 감축 소나무 식재 효과', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                          ],
+                        const Expanded(
+                          child: Row(
+                            children: [
+                              Icon(Icons.park, color: Colors.greenAccent),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '탄소 감축 소나무 식재 효과',
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         Text(
                           '${trees.toStringAsFixed(1)} 그루',

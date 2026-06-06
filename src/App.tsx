@@ -3,7 +3,8 @@ import { Compass, Map, Award, Wallet } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { EcoMap } from './components/EcoMap';
 import { Challenges } from './components/Challenges';
-import { MoneyBack, RefundItem } from './components/MoneyBack';
+import { MoneyBack } from './components/MoneyBack';
+import type { RefundItem } from './components/MoneyBack';
 
 type TabType = 'dashboard' | 'map' | 'challenges' | 'moneyback';
 
@@ -28,6 +29,11 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [completedChallenges, setCompletedChallenges] = useState<number[]>(() => {
+    const saved = localStorage.getItem('eco_completed_challenges');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
 
   useEffect(() => {
@@ -45,6 +51,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('eco_refund_history', JSON.stringify(refundHistory));
   }, [refundHistory]);
+
+  useEffect(() => {
+    localStorage.setItem('eco_completed_challenges', JSON.stringify(completedChallenges));
+  }, [completedChallenges]);
 
   return (
     <div className="mobile-frame">
@@ -101,7 +111,7 @@ function App() {
         }}
       ></div>
 
-      <div className="app-content" style={{ zIndex: 1, position: 'relative' }}>
+      <div className="app-content" style={{ zIndex: 1, position: 'relative', height: 'calc(100% - 64px)' }}>
         {activeTab === 'dashboard' && (
           <Dashboard
             points={points}
@@ -113,14 +123,20 @@ function App() {
           />
         )}
 
-        {activeTab === 'map' && (
+        {/* 에코 맵(Flutter Web iframe)은 리로딩 지연 제거 및 백그라운드 양방향 실시간 동기화를 위해 DOM 상시 유지 */}
+        <div style={{ display: activeTab === 'map' ? 'block' : 'none', height: '100%' }}>
           <EcoMap
             points={points}
             setPoints={setPoints}
             co2Saved={co2Saved}
             setCo2Saved={setCo2Saved}
+            steps={steps}
+            setSteps={setSteps}
+            completedChallenges={completedChallenges}
+            refundHistory={refundHistory}
+            setRefundHistory={setRefundHistory}
           />
-        )}
+        </div>
 
         {activeTab === 'challenges' && (
           <Challenges
@@ -128,6 +144,8 @@ function App() {
             setPoints={setPoints}
             co2Saved={co2Saved}
             setCo2Saved={setCo2Saved}
+            completedChallenges={completedChallenges}
+            setCompletedChallenges={setCompletedChallenges}
           />
         )}
 

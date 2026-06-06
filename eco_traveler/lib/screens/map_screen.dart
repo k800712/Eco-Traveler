@@ -197,14 +197,43 @@ class _MapScreenState extends State<MapScreen> {
                   );
                 }),
                 // 지도 좌측 상단 범례
-                const Positioned(
+                Positioned(
                   left: 12,
                   top: 12,
+                  right: 12,
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(Icons.map, size: 14, color: Colors.greenAccent),
-                      SizedBox(width: 4),
-                      Text('에코 맵 가이드 (오피넷 연동)', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      const Row(
+                        children: [
+                          Icon(Icons.map, size: 14, color: Colors.greenAccent),
+                          SizedBox(width: 4),
+                          Text('에코 맵 가이드', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: MockServices.isTourApiRealConnected 
+                              ? Colors.blue.withOpacity(0.2) 
+                              : Colors.orange.withOpacity(0.2),
+                          border: Border.all(
+                            color: MockServices.isTourApiRealConnected ? Colors.blueAccent : Colors.orangeAccent,
+                            width: 0.5,
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          MockServices.isTourApiRealConnected 
+                              ? '📡 실시간 TourAPI 연동 중' 
+                              : '💻 로컬 모의 데이터 연동 중',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: MockServices.isTourApiRealConnected ? Colors.blueAccent : Colors.orangeAccent,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
