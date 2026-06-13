@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:universal_html/html.dart' as html;
 import '../providers/app_state.dart';
+import '../services/mock_services.dart';
 
 class WebCommunication {
   static AppState? _appState;
@@ -68,6 +69,22 @@ class WebCommunication {
               debugPrint('WebCommunication: Received SYNC_STATE from React. Points: $points, Steps: $steps, CO2: $co2Saved, CompletedChallenges: $completedChallenges, RefundHistoryCount: ${refundHistory.length}');
               _appState?.syncState(points, steps, co2Saved, completedChallenges, refundHistory);
             }
+          } else if (data['type'] == 'SYNC_ADMIN_SETTINGS') {
+            final double? fuelPrice = double.tryParse(data['fuelPrice']?.toString() ?? '');
+            final Map<dynamic, dynamic>? rawWeights = data['regionWeights'] as Map?;
+
+            MockServices.adminFuelPrice = fuelPrice;
+            if (rawWeights != null) {
+              MockServices.adminRegionWeights.clear();
+              rawWeights.forEach((key, value) {
+                final double? w = double.tryParse(value.toString());
+                if (w != null) {
+                  MockServices.adminRegionWeights[key.toString()] = w;
+                }
+              });
+            }
+            debugPrint('WebCommunication: Received SYNC_ADMIN_SETTINGS. Price: ${MockServices.adminFuelPrice}, Weights: ${MockServices.adminRegionWeights}');
+            _appState?.triggerAdminSettingsUpdated();
           }
         } catch (e) {
           debugPrint('WebCommunication_Error: Failed to process incoming message: $e');

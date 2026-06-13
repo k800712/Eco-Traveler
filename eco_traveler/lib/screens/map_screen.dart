@@ -16,6 +16,7 @@ class _MapScreenState extends State<MapScreen> {
   TourSpot? _selectedSpot;
   bool _loading = true;
   double _fuelPrice = 1650.0;
+  AppState? _appState;
 
   // 게이미피케이션 체크박스 상태
   bool _isTrainBonus = true;
@@ -29,10 +30,36 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
+    _loadData(isInitial: true);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newAppState = Provider.of<AppState>(context);
+    if (_appState != newAppState) {
+      _appState?.removeListener(_onAppStateChanged);
+      _appState = newAppState;
+      _appState?.addListener(_onAppStateChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    _appState?.removeListener(_onAppStateChanged);
+    super.dispose();
+  }
+
+  void _onAppStateChanged() {
     _loadData();
   }
 
-  void _loadData() async {
+  void _loadData({bool isInitial = false}) async {
+    if (isInitial) {
+      setState(() {
+        _loading = true;
+      });
+    }
     final spots = await MockServices.getEcoTourSpots();
     final price = await MockServices.getAverageFuelPrice();
     if (mounted) {
@@ -40,6 +67,15 @@ class _MapScreenState extends State<MapScreen> {
         _spots = spots;
         _fuelPrice = price;
         _loading = false;
+
+        // 선택된 스팟이 있으면 새 목록의 동일 스팟(가중치 갱신됨)으로 참조 갱신
+        if (_selectedSpot != null) {
+          try {
+            _selectedSpot = spots.firstWhere((s) => s.name == _selectedSpot!.name);
+          } catch (_) {
+            _selectedSpot = null;
+          }
+        }
       });
     }
   }

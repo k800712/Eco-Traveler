@@ -1,12 +1,102 @@
 import { useEffect, useState, useRef } from 'react';
-import { Leaf, Smartphone, Sparkles, MapPin, Activity, Award, Download, ArrowRight, CheckCircle, Shield, Globe, Users } from 'lucide-react';
+import { Leaf, Smartphone, Sparkles, MapPin, Activity, Download, ArrowRight, CheckCircle, Shield, Globe, Users } from 'lucide-react';
 import EcoApp from './components/EcoApp';
+import type { RefundItem } from './components/MoneyBack';
+import { AdminBackoffice } from './components/AdminBackoffice';
 
 function App() {
   const [activeNav, setActiveNav] = useState('hero');
   const [downloading, setDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const demoRef = useRef<HTMLDivElement>(null);
+
+
+
+  // 모바일 앱 상태 Lift Up
+  const [points, setPoints] = useState<number>(() => {
+    const saved = localStorage.getItem('eco_points');
+    return saved ? parseInt(saved, 10) : 3500;
+  });
+
+  const [steps, setSteps] = useState<number>(() => {
+    const saved = localStorage.getItem('eco_steps');
+    return saved ? parseInt(saved, 10) : 4320;
+  });
+
+  const [co2Saved, setCo2Saved] = useState<number>(() => {
+    const saved = localStorage.getItem('eco_co2');
+    return saved ? parseFloat(saved) : 0.85;
+  });
+
+  const [refundHistory, setRefundHistory] = useState<RefundItem[]>(() => {
+    const saved = localStorage.getItem('eco_refund_history');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [completedChallenges, setCompletedChallenges] = useState<number[]>(() => {
+    const saved = localStorage.getItem('eco_completed_challenges');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [adminFuelPrice, setAdminFuelPrice] = useState<number | null>(null);
+  const [adminRegionWeights, setAdminRegionWeights] = useState<Record<string, number>>({
+    '단양': 2.0,
+    '태안': 1.8,
+    '정선': 1.5,
+    '고양(일산)': 1.5,
+    '서울': 1.0,
+  });
+
+  useEffect(() => {
+    localStorage.setItem('eco_points', points.toString());
+  }, [points]);
+
+  useEffect(() => {
+    localStorage.setItem('eco_steps', steps.toString());
+  }, [steps]);
+
+  useEffect(() => {
+    localStorage.setItem('eco_co2', co2Saved.toString());
+  }, [co2Saved]);
+
+  useEffect(() => {
+    localStorage.setItem('eco_refund_history', JSON.stringify(refundHistory));
+  }, [refundHistory]);
+
+  useEffect(() => {
+    localStorage.setItem('eco_completed_challenges', JSON.stringify(completedChallenges));
+  }, [completedChallenges]);
+
+  // 크로스 탭 상태 동기화 Effect (window storage 이벤트 감지)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (!e.key) return;
+      try {
+        if (e.key === 'eco_points' && e.newValue) {
+          setPoints(parseInt(e.newValue, 10));
+        } else if (e.key === 'eco_steps' && e.newValue) {
+          setSteps(parseInt(e.newValue, 10));
+        } else if (e.key === 'eco_co2' && e.newValue) {
+          setCo2Saved(parseFloat(e.newValue));
+        } else if (e.key === 'eco_refund_history' && e.newValue) {
+          setRefundHistory(JSON.parse(e.newValue));
+        } else if (e.key === 'eco_completed_challenges' && e.newValue) {
+          setCompletedChallenges(JSON.parse(e.newValue));
+        } else if (e.key === 'admin_fuel_price') {
+          setAdminFuelPrice(e.newValue ? parseInt(e.newValue, 10) : null);
+        } else if (e.key === 'admin_region_weights' && e.newValue) {
+          setAdminRegionWeights(JSON.parse(e.newValue));
+        }
+      } catch (err) {
+        console.error('Cross-Tab Sync Error:', err);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+
 
   // 스크롤 시 GNB 활성 탭 전환 및 투명도 조절
   useEffect(() => {
@@ -79,6 +169,10 @@ function App() {
     demoRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  if (window.location.pathname === '/admin') {
+    return <AdminBackoffice />;
+  }
+
   return (
     <div style={{ width: '100%' }}>
       {/* 백그라운드 블러 글로우 (다크에코 무드) */}
@@ -121,7 +215,9 @@ function App() {
               <a 
                 href="#demo" 
                 className={`nav-link ${activeNav === 'demo' ? 'active' : ''}`}
-                onClick={scrollToDemo}
+                onClick={(e) => {
+                  scrollToDemo(e);
+                }}
               >
                 실시간 데모
               </a>
@@ -139,7 +235,7 @@ function App() {
           <div className="hero-grid">
             <div className="hero-content reveal">
               <div className="hero-badge">
-                <Sparkles size={14} /> AI 기반 다크 에코 관광 플랫폼
+                <Sparkles size={14} /> 쉽고 재미있는 친환경 여행 가이드
               </div>
               <h1 className="hero-title">
                 지구를 구하는 여행,<br />
@@ -147,12 +243,12 @@ function App() {
                 시작됩니다.
               </h1>
               <p className="hero-desc">
-                에코-트래블러는 배리어프리(Barrier-Free) 무장애 관광 정보와 AI 저탄소 맞춤형 여정 추천을 제공합니다. 
-                지속 가능한 로컬 환경을 탐험하고, 이산화탄소를 절감해 실시간 현금 머니백 혜택까지 누리세요.
+                에코-트래블러는 휠체어나 유모차가 가기 편한 좋은 길을 알려주고, 지구를 지킬 수 있는 저탄소 여행지를 알려주는 앱이에요. 
+                지구를 아끼는 미션을 성공하고 포인트를 모아 통장에 진짜 돈으로 돌려받아 보세요!
               </p>
               <div className="hero-ctas">
                 <a href="#demo" className="btn-hero btn-hero-primary" onClick={scrollToDemo}>
-                  실시간 데모 체험 <ArrowRight size={18} />
+                  지금 바로 사용해보기 <ArrowRight size={18} />
                 </a>
                 <a href="#download" className="btn-hero btn-hero-secondary" onClick={handleDownload}>
                   <Download size={18} /> {downloading ? '설치 파일 준비 중...' : '앱 무료 다운로드'}
@@ -186,15 +282,15 @@ function App() {
               <div className="hero-stats">
                 <div className="stat-item">
                   <span className="stat-val">12,480kg</span>
-                  <span className="stat-lbl">총 이산화탄소 절감</span>
+                  <span className="stat-lbl">아낀 탄소 무게</span>
                 </div>
                 <div className="stat-item">
                   <span className="stat-val">99.4%</span>
-                  <span className="stat-lbl">무장애 동선 정확도</span>
+                  <span className="stat-lbl">길찾기 성공률</span>
                 </div>
                 <div className="stat-item">
                   <span className="stat-val">4.9★</span>
-                  <span className="stat-lbl">스토어 사용자 평점</span>
+                  <span className="stat-lbl">사용자 만족도</span>
                 </div>
               </div>
             </div>
@@ -215,7 +311,20 @@ function App() {
                   e.currentTarget.style.transform = 'rotateY(-12deg) rotateX(8deg)';
                 }}
               >
-                <EcoApp />
+                <EcoApp
+                  points={points}
+                  setPoints={setPoints}
+                  steps={steps}
+                  setSteps={setSteps}
+                  co2Saved={co2Saved}
+                  setCo2Saved={setCo2Saved}
+                  refundHistory={refundHistory}
+                  setRefundHistory={setRefundHistory}
+                  completedChallenges={completedChallenges}
+                  setCompletedChallenges={setCompletedChallenges}
+                  adminFuelPrice={adminFuelPrice}
+                  adminRegionWeights={adminRegionWeights}
+                />
               </div>
             </div>
           </div>
@@ -227,10 +336,10 @@ function App() {
         <div className="landing-container">
           <div className="section-header reveal">
             <h2 className="section-title">
-              더 나은 내일을 위한 <span>에코 파트너</span>
+              지구를 지켜주는 <span>착한 걷기 파트너</span>
             </h2>
             <p className="section-desc">
-              에코-트래블러는 단순히 길을 찾는 지도를 넘어, 친환경 이동과 로컬 챌린지 및 데이터 검증 기술을 결합하여 누구나 참여할 수 있는 녹색 관광 생태계를 만듭니다.
+              에코-트래블러와 함께 걷는 여행을 시작해봐요! 내가 걸으면서 지구를 구하고, 다 함께 행복해지는 친환경 여행을 가꾸어 갑니다.
             </p>
           </div>
 
@@ -239,9 +348,9 @@ function App() {
               <div className="feature-icon-wrapper">
                 <MapPin size={28} />
               </div>
-              <h3 className="feature-title">무장애 & 에코 맵</h3>
+              <h3 className="feature-title">모두가 걷기 좋은 에코 지도</h3>
               <p className="feature-desc">
-                경사로 및 리프트가 완비된 무장애(Barrier-Free) 최적 이동 루트와 탄소 배출량이 가장 적은 에코 관광 정보 및 대중교통 동선을 결합하여 완벽한 에코 지도를 서비스합니다.
+                휠체어나 유모차도 편하게 갈 수 있는 경사로 길을 보여줘요. 자연을 지켜주는 깨끗한 대중교통 이용 방법과 가까운 친환경 여행지를 쉽게 찾을 수 있는 친화적인 지도입니다.
               </p>
             </div>
 
@@ -249,9 +358,9 @@ function App() {
               <div className="feature-icon-wrapper">
                 <Sparkles size={28} />
               </div>
-              <h3 className="feature-title">AI 에코 버틀러</h3>
+              <h3 className="feature-title">AI 에코 비서</h3>
               <p className="feature-desc">
-                당신의 성향, 실시간 기상 상태, 에너지 절감 선호도를 분석하여 지구에 해를 끼치지 않는 나만의 에코 로컬 여행지를 스마트하게 추천해 드립니다.
+                내가 가보고 싶은 취향과 오늘 날씨를 척척 분석해서, 자연환경을 아끼고 사랑할 수 있는 보물 같은 로컬 여행지를 추천해 드립니다.
               </p>
             </div>
 
@@ -259,9 +368,9 @@ function App() {
               <div className="feature-icon-wrapper">
                 <Activity size={28} />
               </div>
-              <h3 className="feature-title">탄소 저감 머니백</h3>
+              <h3 className="feature-title">지구를 지키고 돈 받기</h3>
               <p className="feature-desc">
-                도보 이동, 대중교통 탑승, 제로웨이스트 실천 챌린지를 완수할 때마다 실시간으로 에코 포인트를 획득하고 계좌로 즉시 현금 환급(머니백)을 받으실 수 있습니다.
+                많이 걷기, 버스 타기, 텀블러 사용하기 미션을 하고 얻은 에코 포인트를 내 통장에 진짜 돈으로 입금받는 재미있는 리워드 시스템입니다.
               </p>
             </div>
           </div>
@@ -274,39 +383,39 @@ function App() {
           <div className="demo-grid">
             <div className="demo-info reveal">
               <div className="hero-badge">
-                <Smartphone size={14} /> 실시간 하이브리드 앱 데모
+                <Smartphone size={14} /> 가상 스마트폰 체험존
               </div>
               <h2 className="section-title" style={{ fontSize: '38px' }}>
-                기다리지 말고,<br />
-                지금 <span>직접 조작</span>해 보세요
+                앱을 안 깔아도 괜찮아요,<br />
+                지금 <span>직접 눌러보세요!</span>
               </h2>
               <p className="section-desc" style={{ marginBottom: '32px' }}>
-                설치 없이 웹 화면에서 에코-트래블러의 스마트폰 환경을 동일하게 시뮬레이션할 수 있습니다. 
-                우측의 목업 스마트폰 내부 탭을 클릭하여 맵 연동, 챌린지 수행, 현금 머니백 시스템을 즉시 경험하세요.
+                오른쪽에 있는 스마트폰 화면을 손가락으로 누르듯이 마우스로 클릭해 보세요! 
+                걷기, 지도 조작하기, 텀블러 미션 하기, 모은 포인트 진짜로 돈 돌려받기까지 미리 체험해 볼 수 있습니다.
               </p>
 
               <div className="demo-step-list">
                 <div className="demo-step-item active">
                   <div className="demo-step-num">1</div>
                   <div>
-                    <h4 className="demo-step-title">대시보드에서 탄소 추적</h4>
-                    <p className="demo-step-desc">실시간 걸음 수와 절감한 누적 CO2 배출량을 직관적으로 확인하고 포인트를 적립합니다.</p>
+                    <h4 className="demo-step-title">걸음 수와 포인트 확인하기</h4>
+                    <p className="demo-step-desc">내가 오늘 열심히 걸어서 모은 포인트와 아낀 공기(탄소) 무게를 대시보드에서 보아요.</p>
                   </div>
                 </div>
 
                 <div className="demo-step-item">
                   <div className="demo-step-num">2</div>
                   <div>
-                    <h4 className="demo-step-title">로컬 에코 맵 탐색</h4>
-                    <p className="demo-step-desc">Barrier-Free 마크와 에코 마크가 연동된 친환경 목적지를 탐색하고 최적 루트를 설계합니다.</p>
+                    <h4 className="demo-step-title">에코 지도 탐색하기</h4>
+                    <p className="demo-step-desc">유모차나 휠체어가 가기 쉬운 길과 푸릇푸릇한 친환경 여행지를 지도 마커로 확인하며 경로를 짜요.</p>
                   </div>
                 </div>
 
                 <div className="demo-step-item">
                   <div className="demo-step-num">3</div>
                   <div>
-                    <h4 className="demo-step-title">에코 챌린지 및 머니백</h4>
-                    <p className="demo-step-desc">다양한 미션을 달성하여 쌓인 포인트를 실시간으로 출금 신청하여 현금으로 환급받습니다.</p>
+                    <h4 className="demo-step-title">미션 완료하고 돈 돌려받기</h4>
+                    <p className="demo-step-desc">개인 텀블러 미션이나 걷기 미션으로 포인트를 모아 진짜 내 지갑(통장)으로 쏙 돌려받습니다.</p>
                   </div>
                 </div>
               </div>
@@ -315,7 +424,20 @@ function App() {
             {/* 실제 마우스 인터랙션이 활성화된 폰 데모 프레임 */}
             <div className="demo-phone-container reveal delay-200">
               <div style={{ position: 'relative' }}>
-                <EcoApp />
+                <EcoApp
+                  points={points}
+                  setPoints={setPoints}
+                  steps={steps}
+                  setSteps={setSteps}
+                  co2Saved={co2Saved}
+                  setCo2Saved={setCo2Saved}
+                  refundHistory={refundHistory}
+                  setRefundHistory={setRefundHistory}
+                  completedChallenges={completedChallenges}
+                  setCompletedChallenges={setCompletedChallenges}
+                  adminFuelPrice={adminFuelPrice}
+                  adminRegionWeights={adminRegionWeights}
+                />
                 <div 
                   style={{
                     position: 'absolute',
@@ -353,10 +475,10 @@ function App() {
         <div className="landing-container" style={{ textAlign: 'center' }}>
           <div className="reveal" style={{ maxWidth: '750px', margin: '0 auto' }}>
             <h2 className="section-title" style={{ fontSize: '42px', marginBottom: '20px' }}>
-              더 푸른 지구를 만드는 여행,<br /><span>지금 바로 시작하세요</span>
+              푸른 지구를 만드는 착한 여행,<br /><span>지금 바로 시작해요!</span>
             </h2>
             <p className="section-desc" style={{ marginBottom: '40px' }}>
-              에코-트래블러는 환경부가 보증하는 탄소 인증 알고리즘과 지자체 연동 배리어프리 지도 데이터 인프라를 활용하여 검증되고 투명한 친환경 여행 여정을 가꿔 갑니다.
+              에코-트래블러는 걷기 운동과 일상 속 작은 친환경 실천으로 이산화탄소를 줄이고, 누구나 즐겁고 편하게 자연을 즐기며 힐링할 수 있도록 돕는 친화적인 도우미 서비스입니다.
             </p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
               <a 
@@ -390,17 +512,17 @@ function App() {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <Shield size={24} style={{ color: 'var(--primary-neon)' }} />
                 <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>개인정보 안전 보장</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>강력한 데이터 암호화 준수</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>소중한 내 정보 안전하게 보관</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <Globe size={24} style={{ color: 'var(--primary-neon)' }} />
-                <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>전국 관광 데이터 지원</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>로컬 투어 인프라 완벽 연동</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>전국의 가 볼 만한 곳 추천</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>어디서든 편하게 볼 수 있는 여행 정보</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <Users size={24} style={{ color: 'var(--primary-neon)' }} />
-                <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>공식 에코 기관 협업</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>탄소 중립 실천 검증 완료</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>친환경 라이프 실천</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>지구를 살리는 착한 도보 동행</span>
               </div>
             </div>
           </div>

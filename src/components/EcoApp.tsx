@@ -1,50 +1,43 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Compass, Map, Award, Wallet } from 'lucide-react';
 import { Dashboard } from './Dashboard';
 import { EcoMap } from './EcoMap';
 import { Challenges } from './Challenges';
-import { MoneyBack, RefundItem } from './MoneyBack';
+import { MoneyBack } from './MoneyBack';
+import type { RefundItem } from './MoneyBack';
 
 type TabType = 'dashboard' | 'map' | 'challenges' | 'moneyback';
 
-export function EcoApp() {
-  const [points, setPoints] = useState<number>(() => {
-    const saved = localStorage.getItem('eco_points');
-    return saved ? parseInt(saved, 10) : 3500;
-  });
+interface EcoAppProps {
+  points: number;
+  setPoints: React.Dispatch<React.SetStateAction<number>>;
+  steps: number;
+  setSteps: React.Dispatch<React.SetStateAction<number>>;
+  co2Saved: number;
+  setCo2Saved: React.Dispatch<React.SetStateAction<number>>;
+  refundHistory: RefundItem[];
+  setRefundHistory: React.Dispatch<React.SetStateAction<RefundItem[]>>;
+  completedChallenges: number[];
+  setCompletedChallenges: React.Dispatch<React.SetStateAction<number[]>>;
+  adminFuelPrice: number | null;
+  adminRegionWeights: Record<string, number>;
+}
 
-  const [steps, setSteps] = useState<number>(() => {
-    const saved = localStorage.getItem('eco_steps');
-    return saved ? parseInt(saved, 10) : 4320;
-  });
-
-  const [co2Saved, setCo2Saved] = useState<number>(() => {
-    const saved = localStorage.getItem('eco_co2');
-    return saved ? parseFloat(saved) : 0.85;
-  });
-
-  const [refundHistory, setRefundHistory] = useState<RefundItem[]>(() => {
-    const saved = localStorage.getItem('eco_refund_history');
-    return saved ? JSON.parse(saved) : [];
-  });
-
+export function EcoApp({
+  points,
+  setPoints,
+  steps,
+  setSteps,
+  co2Saved,
+  setCo2Saved,
+  refundHistory,
+  setRefundHistory,
+  completedChallenges,
+  setCompletedChallenges,
+  adminFuelPrice,
+  adminRegionWeights
+}: EcoAppProps) {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
-
-  useEffect(() => {
-    localStorage.setItem('eco_points', points.toString());
-  }, [points]);
-
-  useEffect(() => {
-    localStorage.setItem('eco_steps', steps.toString());
-  }, [steps]);
-
-  useEffect(() => {
-    localStorage.setItem('eco_co2', co2Saved.toString());
-  }, [co2Saved]);
-
-  useEffect(() => {
-    localStorage.setItem('eco_refund_history', JSON.stringify(refundHistory));
-  }, [refundHistory]);
 
   return (
     <div className="mobile-frame">
@@ -113,14 +106,22 @@ export function EcoApp() {
           />
         )}
 
-        {activeTab === 'map' && (
+        {/* 에코 맵(Flutter Web iframe)은 리로딩 지연 제거 및 백그라운드 양방향 실시간 동기화를 위해 DOM 상시 유지 */}
+        <div style={{ display: activeTab === 'map' ? 'block' : 'none', height: '100%' }}>
           <EcoMap
             points={points}
             setPoints={setPoints}
             co2Saved={co2Saved}
             setCo2Saved={setCo2Saved}
+            steps={steps}
+            setSteps={setSteps}
+            completedChallenges={completedChallenges}
+            refundHistory={refundHistory}
+            setRefundHistory={setRefundHistory}
+            adminFuelPrice={adminFuelPrice}
+            adminRegionWeights={adminRegionWeights}
           />
-        )}
+        </div>
 
         {activeTab === 'challenges' && (
           <Challenges
@@ -128,6 +129,8 @@ export function EcoApp() {
             setPoints={setPoints}
             co2Saved={co2Saved}
             setCo2Saved={setCo2Saved}
+            completedChallenges={completedChallenges}
+            setCompletedChallenges={setCompletedChallenges}
           />
         )}
 
@@ -139,6 +142,7 @@ export function EcoApp() {
             setRefundHistory={setRefundHistory}
           />
         )}
+
       </div>
 
       <nav className="bottom-nav">

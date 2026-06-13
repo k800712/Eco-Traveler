@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter/foundation.dart';
+import 'package:universal_html/html.dart' as html;
 import 'providers/app_state.dart';
 import 'services/web_communication.dart';
 import 'screens/dashboard_screen.dart';
@@ -36,6 +38,21 @@ Future<void> main() async {
 
 class EcoTravelerApp extends StatelessWidget {
   const EcoTravelerApp({super.key});
+
+  Widget _buildHomeScreen() {
+    if (kIsWeb) {
+      try {
+        if (html.window.self != html.window.top) {
+          return const MapScreen();
+        }
+      } catch (_) {
+        return const MapScreen();
+      }
+    }
+    return const DesktopLayoutWrapper(
+      child: MainShellScreen(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,9 +92,7 @@ class EcoTravelerApp extends StatelessWidget {
           centerTitle: true,
         ),
       ),
-      home: const DesktopLayoutWrapper(
-        child: MainShellScreen(),
-      ),
+      home: _buildHomeScreen(),
     );
   }
 }

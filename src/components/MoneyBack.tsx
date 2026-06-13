@@ -120,6 +120,12 @@ export const MoneyBack: React.FC<MoneyBackProps> = ({
 }) => {
   // 1. subTab 상태 확장: referral(친구 추천) 추가
   const [subTab, setSubTab] = useState<'cashback' | 'shop' | 'referral'>('shop');
+
+  React.useEffect(() => {
+    if (!localStorage.getItem('eco_total_users')) {
+      localStorage.setItem('eco_total_users', '1482');
+    }
+  }, []);
   const [shopCategory, setShopCategory] = useState<'all' | 'fnb' | 'car' | 'life'>('all');
   
   const [bank, setBank] = useState('국민은행');
@@ -280,6 +286,11 @@ export const MoneyBack: React.FC<MoneyBackProps> = ({
     const isNewJoin = Math.random() > 0.4; // 60% 확률로 새 가입, 40% 확률로 기여활동
 
     if (isNewJoin) {
+      // 어드민 연동을 위한 가입자 수 증가
+      const currentUsers = localStorage.getItem('eco_total_users');
+      const nextUsers = currentUsers ? parseInt(currentUsers, 10) + 1 : 1483;
+      localStorage.setItem('eco_total_users', nextUsers.toString());
+
       // 신규 친구 가입 보상 (+1,000P)
       const bonusAmount = 1000;
       setPoints(p => p + bonusAmount);

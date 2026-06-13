@@ -12,6 +12,8 @@ interface EcoMapProps {
   completedChallenges: number[];
   refundHistory: RefundItem[];
   setRefundHistory: React.Dispatch<React.SetStateAction<RefundItem[]>>;
+  adminFuelPrice: number | null;
+  adminRegionWeights: Record<string, number>;
 }
 
 export const EcoMap: React.FC<EcoMapProps> = ({
@@ -23,7 +25,9 @@ export const EcoMap: React.FC<EcoMapProps> = ({
   setSteps,
   completedChallenges,
   refundHistory,
-  setRefundHistory
+  setRefundHistory,
+  adminFuelPrice,
+  adminRegionWeights
 }) => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -48,10 +52,19 @@ export const EcoMap: React.FC<EcoMapProps> = ({
       
       // JSON String 호환성용 postMessage 동시 전송
       iframe.contentWindow.postMessage(JSON.stringify(statePayload), '*');
+
+      // 관리자 설정 동기화 추가 전송
+      const adminPayload = {
+        type: 'SYNC_ADMIN_SETTINGS',
+        fuelPrice: adminFuelPrice,
+        regionWeights: adminRegionWeights
+      };
+      iframe.contentWindow.postMessage(adminPayload, '*');
+      iframe.contentWindow.postMessage(JSON.stringify(adminPayload), '*');
       
-      console.log('React -> Flutter: Sent SYNC_STATE message.', statePayload);
+      console.log('React -> Flutter: Sent SYNC_STATE & SYNC_ADMIN_SETTINGS message.', { statePayload, adminPayload });
     }
-  }, [points, steps, co2Saved, completedChallenges, refundHistory, iframeLoaded]);
+  }, [points, steps, co2Saved, completedChallenges, refundHistory, adminFuelPrice, adminRegionWeights, iframeLoaded]);
 
   // 2. Flutter Web -> React 수신 메시지 리스너 Effect
   useEffect(() => {

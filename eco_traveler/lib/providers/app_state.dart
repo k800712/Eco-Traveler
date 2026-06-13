@@ -105,6 +105,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 관리자 모드 가중치/유가 갱신 알림 트리거
+  void triggerAdminSettingsUpdated() {
+    notifyListeners();
+  }
+
   // 유저 등급 업그레이드 시뮬레이션
   void upgradeGrade(UserGrade newGrade) {
     _userGrade = newGrade;

@@ -53,11 +53,16 @@ class MockServices {
   // TourAPI 실시간 연결 성공 여부 플래그
   static bool isTourApiRealConnected = false;
 
+  // 관리자 설정 제어 변수
+  static double? adminFuelPrice;
+  static final Map<String, double> adminRegionWeights = {};
+
   // ① 대상 리워드 우대 지역 및 매핑 테이블 정의
   static final List<RegionMapping> _regions = [
     RegionMapping(name: '단양', areaCode: 33, sigunguCode: 3, latitude: 36.9845, longitude: 128.3650, weight: 2.0),
     RegionMapping(name: '태안', areaCode: 34, sigunguCode: 14, latitude: 36.7456, longitude: 126.2980, weight: 1.8),
     RegionMapping(name: '정선', areaCode: 32, sigunguCode: 11, latitude: 37.3800, longitude: 128.6600, weight: 1.5),
+    RegionMapping(name: '고양(일산)', areaCode: 31, sigunguCode: 2, latitude: 37.6584, longitude: 126.8320, weight: 1.5),
     RegionMapping(name: '서울', areaCode: 1, sigunguCode: 0, latitude: 37.5665, longitude: 126.9780, weight: 1.0),
   ];
 
@@ -71,6 +76,12 @@ class MockServices {
 
   // 1. 오피넷 실시간 평균 유가 실제 연동 및 하이브리드 Fallback 구현 (원/L)
   static Future<double> getAverageFuelPrice() async {
+    // 관리자 오버라이드 유가가 설정되어 있으면 최우선 적용
+    if (adminFuelPrice != null) {
+      debugPrint('Admin_Override: Using admin configured fuel price: $adminFuelPrice');
+      return adminFuelPrice!;
+    }
+
     final String? apiKey = dotenv.env['OPINET_API_KEY'];
     final double defaultPrice = double.tryParse(dotenv.env['BASE_FUEL_PRICE'] ?? '1650.0') ?? 1650.0;
 
@@ -252,7 +263,7 @@ class MockServices {
             region: addr,
             description: '한국관광공사 실시간 연동 생태 에코 코스. 친환경 여정 전환으로 탄소 배출 저감에 동참해 주세요.',
             accessibilityInfo: accessibilityInfo,
-            regionWeight: nearestRegion.weight,
+            regionWeight: adminRegionWeights[nearestRegion.name] ?? nearestRegion.weight,
             festivalName: festivalName,
             distanceKm: double.parse(distance.toStringAsFixed(1)),
             tollFee: (tollFee / 100).round() * 100, // 100원 단위 절사
@@ -279,7 +290,7 @@ class MockServices {
         region: '충청북도 단양군 (인구 감소 우대 지역)',
         description: '고구려 온달 장군과 평강 공주의 설화가 깃든 유서 깊은 천연동굴',
         accessibilityInfo: '♿️ 휠체어 전용 램프 및 점자 블록 완비, 시각장애인 음성 가이드 제공',
-        regionWeight: 2.0,
+        regionWeight: adminRegionWeights['단양'] ?? 2.0,
         festivalName: '단양 온달 문화 축제 (10월 개최)',
         distanceKm: 185.0,
         tollFee: 8500,
@@ -290,7 +301,7 @@ class MockServices {
         region: '충청남도 태안군 (인구 감소 우대 지역)',
         description: '세계 푸른 수목원으로 지정된 서해안 최고의 생태 보고',
         accessibilityInfo: '♿️ 무장애 나눔길 설치 (경사도 8% 이하 나무 데크 로드)',
-        regionWeight: 1.8,
+        regionWeight: adminRegionWeights['태안'] ?? 1.8,
         festivalName: '태안 백합 & 다알리아 꽃 축제',
         distanceKm: 152.0,
         tollFee: 6200,
@@ -301,18 +312,29 @@ class MockServices {
         region: '강원도 정선군 (인구 감소 우대 지역)',
         description: '강원의 정취와 정선 아리랑의 선율이 흐르는 전통 생태 시골 장터',
         accessibilityInfo: '♿️ 주출입구 무단차 및 배리어프리 전용 화장실 제공',
-        regionWeight: 1.5,
+        regionWeight: adminRegionWeights['정선'] ?? 1.5,
         festivalName: '정선 아리랑제 축제 (9월 개최)',
         distanceKm: 210.0,
         tollFee: 9600,
         publicTransitFee: 16100,
       ),
       TourSpot(
+        name: '일산 호수공원',
+        region: '경기도 고양시 일산동구 (시범 가점 지역)',
+        description: '동양 최대의 인공 호수로 자연 생태계가 잘 보존된 친환경 도심 공원',
+        accessibilityInfo: '♿️ 무장애 보행로 및 유모차/휠체어 경사로 완비, 배리어프리 화장실 보유',
+        regionWeight: adminRegionWeights['고양(일산)'] ?? 1.5,
+        festivalName: '고양 국제 꽃 박람회 (4~5월 개최)',
+        distanceKm: 28.5,
+        tollFee: 2900,
+        publicTransitFee: 1650,
+      ),
+      TourSpot(
         name: '서울 경복궁',
         region: '서울특별시 종로구',
         description: '조선 왕조의 법궁으로서 한국의 역사와 건축미를 대표하는 고궁',
         accessibilityInfo: '♿️ 유모차 및 휠체어 무료 대여, 입구 경사로 구비',
-        regionWeight: 1.0,
+        regionWeight: adminRegionWeights['서울'] ?? 1.0,
         festivalName: '경복궁 야간 특별 관람 행사',
         distanceKm: 2.5,
         tollFee: 0,
@@ -321,7 +343,7 @@ class MockServices {
     ];
   }
 
-  // 3. Gemini API 기반 'AI 에코 버틀러' 모킹
+  // 3. Gemini API 기반 'AI 에코 버틀러' 연동
   static Future<String> generateButlerRecommendation({
     required double fuelPrice,
     required String destinationName,
@@ -329,17 +351,93 @@ class MockServices {
     required double trafficLevel,
     required String weather,
   }) async {
-    await Future.delayed(const Duration(milliseconds: 800));
+    final String? apiKey = dotenv.env['GEMINI_API_KEY'];
 
+    // API Key가 없거나 모킹 지시 상태이면 즉시 Fallback 작동
+    if (apiKey == null || apiKey.isEmpty || apiKey.startsWith('MOCK_')) {
+      debugPrint('GeminiAPI_Warning: Valid API Key not found. Using Mock recommendation.');
+      return _getMockRecommendation(fuelPrice, destinationName, regionWeight, trafficLevel, weather);
+    }
+
+    try {
+      final String trafficStatus = trafficLevel > 0.7 
+          ? '정체가 매우 심각하여 자차 주행 시 매연 배출과 연비 저하가 우려되는 상황'
+          : '도로 소통은 원활한 편';
+
+      final String weightMessage = regionWeight > 1.0
+          ? '특별히 이번 행선지는 우대 지역으로 지정되어 에코머니 가중치 ${regionWeight}배가 적용됩니다.'
+          : '도심지 탄소배출을 낮추기 위한 친환경 챌린지 대상 구역입니다.';
+
+      final String prompt = '''
+너는 친환경 대중교통 관광 플랫폼 '에코-트래블러'의 개인화 여정 추천 AI 비서 'AI 에코 버틀러'이다.
+사용자가 입력한 아래 정보를 바탕으로, 대중교통 전환을 유도하고 친환경 걷기 여정을 친근하고 위트 있게 추천하는 멘토링 조언을 작성하라.
+작성 언어는 한글(Korean)이며, 반드시 마크다운(Markdown) 포맷으로 작성하고 분량은 3-4문장 내외로 간결하게 하라.
+
+[여행 정보]
+- 목적지: $destinationName
+- 현재 실시간 휘발유 가격: ${fuelPrice.toInt()}원/L
+- 도로 정체 수준: $trafficLevel (1.0에 가까울수록 정체 극심, 현재 상황: $trafficStatus)
+- 목적지 날씨: $weather
+- 우대 혜택 적용 여부: $weightMessage
+
+[작성 가이드라인]
+1. 인사말과 함께 목적지의 특징을 언급하고, 현재 날씨에 맞춰서 친환경적인 도보나 대중교통 이용을 적극 권장하라.
+2. 높은 유가와 도로 정체 수준을 연계하여 자차 이동 대비 대중교통(KTX, 전철, 버스 등) 이용 시 얻을 수 있는 이점을 유머러스하고 설득력 있게 언급하라.
+3. 획득할 포인트(에코머니) 가중치 혜택을 짚어주고, 텀블러 미션이나 걷기 코스(두루누비)를 추천하여 지구를 구하는 뿌듯함을 강조하라.
+4. 마지막은 여행의 설렘을 돋우는 이모티콘을 섞은 한 문장으로 마무리하라.
+''';
+
+      final Uri requestUri = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey'
+      );
+
+      final http.Response response = await http.post(
+        requestUri,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'contents': [
+            {
+              'parts': [
+                {'text': prompt}
+              ]
+            }
+          ]
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> decoded = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final String? text = decoded['candidates']?[0]?['content']?['parts']?[0]?['text']?.toString();
+        if (text != null && text.trim().isNotEmpty) {
+          debugPrint('GeminiAPI_Success: Fetched advice from Gemini.');
+          return text.trim();
+        }
+      }
+      throw Exception('Invalid Gemini API response status: ${response.statusCode}');
+    } catch (e) {
+      debugPrint('GeminiAPI_Error: Gemini API call failed ($e). Falling back to Mock.');
+      return _getMockRecommendation(fuelPrice, destinationName, regionWeight, trafficLevel, weather);
+    }
+  }
+
+  static String _getMockRecommendation(
+    double fuelPrice,
+    String destinationName,
+    double regionWeight,
+    double trafficLevel,
+    String weather,
+  ) {
     String trafficStatus = trafficLevel > 0.7 
         ? '정체가 매우 심각하여 자차 주행 시 매연 배출과 연비 저하가 우려되는 상황'
         : '도로 소통은 원활한 편';
 
     String weightMessage = regionWeight > 1.0
-        ? '특별히 이번 행선지는 인구 감소 지역으로 지정되어 **에코머니 가중치 ${regionWeight}배**가 적격 적용됩니다!'
+        ? '특별히 이번 행선지는 우대 지역으로 지정되어 **에코머니 가중치 ${regionWeight}배**가 적격 적용됩니다!'
         : '도심지 탄소배출을 낮추기 위한 친환경 챌린지 대상 구역입니다.';
 
-    return '🤖 **AI 에코 버틀러 비서의 추천**\n\n'
+    return '🤖 **AI 에코 버틀러 비서의 추천 (Mock)**\n\n'
         '안녕하세요! 오늘 여행 목적지는 **[$destinationName]** 이군요. '
         '현재 실시간 전국 평균 유가는 **${fuelPrice.toInt()}원/L**로 다소 높은 부담이 있으며, '
         '목적지까지 경로상 $trafficStatus입니다. '
