@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:universal_html/html.dart' as html;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
@@ -54,13 +57,44 @@ class _MapScreenState extends State<MapScreen> {
     _loadData();
   }
 
+  // HTML5 Geolocation API 기반의 GPS 획득 비동기 헬퍼
+  Future<html.Geoposition?> _getCurrentLocation() async {
+    if (!kIsWeb) {
+      return null;
+    }
+    try {
+      final geolocation = html.window.navigator.geolocation;
+      if (geolocation != null) {
+        final position = await geolocation.getCurrentPosition();
+        return position;
+      }
+    } catch (e) {
+      debugPrint('Geolocation not supported or failed: $e');
+    }
+    return null;
+  }
+
   void _loadData({bool isInitial = false}) async {
     if (isInitial) {
       setState(() {
         _loading = true;
       });
     }
-    final spots = await MockServices.getEcoTourSpots();
+
+    double? lat;
+    double? lng;
+
+    // GPS 위치 획득 시도
+    final position = await _getCurrentLocation();
+    if (position != null && position.coords != null) {
+      lat = position.coords!.latitude?.toDouble();
+      lng = position.coords!.longitude?.toDouble();
+      debugPrint('Geolocation_Success: GPS coordinates captured. Lat: $lat, Lng: $lng');
+    } else {
+      debugPrint('Geolocation_Fallback: Failed to capture GPS. Using default Seoul Center.');
+    }
+
+    final spots = await MockServices.getEcoTourSpots(latitude: lat, longitude: lng);
     final price = await MockServices.getAverageFuelPrice();
     if (mounted) {
       setState(() {

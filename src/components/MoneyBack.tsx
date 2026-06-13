@@ -206,13 +206,22 @@ export const MoneyBack: React.FC<MoneyBackProps> = ({
       };
 
       setRefundHistory(prev => [newRefund, ...prev]);
-      setSuccessMsg(`🏦 ${refundAmount.toLocaleString()}원 환급 신청이 완료되었습니다! (영업일 기준 1~2일 소요)`);
+      setSuccessMsg(`🏦 ${refundAmount.toLocaleString()}원 환급 신청이 접수되었습니다!`);
       
       setAccount('');
       setHolder('');
       setAmount('');
 
-      setTimeout(() => setSuccessMsg(null), 4000);
+      // 3초 후 이체완료 상태로 자동 변환 연출
+      setTimeout(() => {
+        setRefundHistory(current => 
+          current.map(item => 
+            item.id === newRefund.id ? { ...item, status: 'completed' } : item
+          )
+        );
+        setSuccessMsg(`💸 ${refundAmount.toLocaleString()}원 이체가 완료되었습니다!`);
+        setTimeout(() => setSuccessMsg(null), 3000);
+      }, 3000);
     }, 1500);
   };
 
@@ -626,15 +635,19 @@ export const MoneyBack: React.FC<MoneyBackProps> = ({
                       style={{ 
                         fontSize: '9px', 
                         fontWeight: '600', 
-                        padding: '2px 6px', 
-                        borderRadius: '4px',
-                        background: item.status === 'processing' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                        padding: '3px 8px', 
+                        borderRadius: '6px',
+                        background: item.status === 'processing' ? 'rgba(245, 158, 11, 0.08)' : 'rgba(16, 185, 129, 0.15)',
+                        border: item.status === 'processing' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid var(--primary-neon)',
                         color: item.status === 'processing' ? '#f59e0b' : 'var(--primary-neon)',
                         display: 'inline-block',
-                        marginTop: '4px'
+                        marginTop: '4px',
+                        transition: 'all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                        boxShadow: item.status === 'completed' ? '0 0 10px rgba(0, 255, 170, 0.35)' : 'none',
+                        transform: item.status === 'completed' ? 'scale(1.05)' : 'scale(1)',
                       }}
                     >
-                      {item.status === 'processing' ? '처리중' : '이체완료'}
+                      {item.status === 'processing' ? '처리중 ⏳' : '이체완료 🎉'}
                     </span>
                   </div>
                 </div>
