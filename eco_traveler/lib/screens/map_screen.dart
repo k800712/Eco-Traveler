@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:universal_html/html.dart' as html;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import '../providers/app_state.dart';
 import '../services/mock_services.dart';
 import '../models/eco_calculator.dart';
+import '../models/tour_spot.dart';
+import '../services/tour_api_service.dart';
+import '../services/supabase_service.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -30,6 +34,11 @@ class _MapScreenState extends State<MapScreen> {
   bool _isTraveling = false;
   double _travelProgress = 0.0;
 
+  // 구글 맵 & 위치 상태 변수 추가
+  GoogleMapController? _mapController;
+  LatLng _centerLatLng = const LatLng(37.5665, 126.9780); // 서울 시청 디폴트
+  Set<Marker> _markers = {};
+
   @override
   void initState() {
     super.initState();
@@ -39,39 +48,122 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final newAppState = Provider.of<AppState>(context);
-    if (_appState != newAppState) {
-      _appState?.removeListener(_onAppStateChanged);
-      _appState = newAppState;
-      _appState?.addListener(_onAppStateChanged);
-    }
+    _appState = Provider.of<AppState>(context, listen: false);
   }
 
   @override
   void dispose() {
-    _appState?.removeListener(_onAppStateChanged);
     super.dispose();
   }
 
-  void _onAppStateChanged() {
-    _loadData();
-  }
+  // Geolocator 기반의 GPS 획득 비동기 헬퍼
+  Future<Position?> _determinePosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
 
-  // HTML5 Geolocation API 기반의 GPS 획득 비동기 헬퍼
-  Future<html.Geoposition?> _getCurrentLocation() async {
-    if (!kIsWeb) {
+    try {
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint('Location services are disabled.');
+        return null;
+      }
+
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          debugPrint('Location permissions are denied');
+          return null;
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        debugPrint('Location permissions are permanently denied.');
+        return null;
+      } 
+
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 5),
+      );
+    } catch (e) {
+      debugPrint('Error getting position via Geolocator: $e');
       return null;
     }
-    try {
-      final geolocation = html.window.navigator.geolocation;
-      if (geolocation != null) {
-        final position = await geolocation.getCurrentPosition();
-        return position;
-      }
-    } catch (e) {
-      debugPrint('Geolocation not supported or failed: $e');
+  }
+
+  // 동적 마커 갱신 루틴
+  void _updateMarkers(AppState appState) {
+    final Set<Marker> newMarkers = {};
+
+    // 1. 사용자 현재 위치 마커 (초록색)
+    newMarkers.add(
+      Marker(
+        markerId: const MarkerId('user_location'),
+        position: _centerLatLng,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        infoWindow: const InfoWindow(title: '내 위치 (에코 트래블러)'),
+      ),
+    );
+
+    // 2. 관광 스팟 마커 (보라색)
+    for (var spot in _spots) {
+      double x = 126.9780;
+      double y = 37.5665;
+      if (spot.name.contains('단양')) { x = 128.3650; y = 36.9845; }
+      else if (spot.name.contains('태안')) { x = 126.2980; y = 36.7456; }
+      else if (spot.name.contains('정선')) { x = 128.6600; y = 37.3800; }
+      else if (spot.name.contains('경복궁')) { x = 126.9768; y = 37.5796; }
+      else if (spot.name.contains('일산') || spot.name.contains('고양')) { x = 126.7642; y = 37.6582; }
+
+      newMarkers.add(
+        Marker(
+          markerId: MarkerId('spot_${spot.name}'),
+          position: LatLng(y, x),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+          infoWindow: InfoWindow(
+            title: spot.name,
+            snippet: '${spot.region} (가중치 ${spot.regionWeight}x)',
+          ),
+          onTap: () {
+            setState(() {
+              _selectedSpot = spot;
+            });
+          },
+        ),
+      );
     }
-    return null;
+
+    // 3. Supabase 제휴 파트너 마커 (정비소: 주황색, 카페: 노란색/시안색)
+    for (var partner in appState.nearbyPartners) {
+      final String name = partner['name'] ?? '제휴 파트너';
+      final String category = partner['category'] ?? '';
+      final double plat = double.tryParse(partner['latitude']?.toString() ?? '') ?? (_centerLatLng.latitude + 0.002);
+      final double plng = double.tryParse(partner['longitude']?.toString() ?? '') ?? (_centerLatLng.longitude + 0.002);
+
+      double hue = BitmapDescriptor.hueCyan;
+      if (category == 'maintenance') {
+        hue = BitmapDescriptor.hueOrange; // 주황색
+      } else if (category == 'cafe') {
+        hue = BitmapDescriptor.hueYellow; // 노란색
+      }
+
+      newMarkers.add(
+        Marker(
+          markerId: MarkerId('partner_${partner['id']}'),
+          position: LatLng(plat, plng),
+          icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+          infoWindow: InfoWindow(
+            title: name,
+            snippet: partner['description'] ?? '',
+          ),
+        ),
+      );
+    }
+
+    setState(() {
+      _markers = newMarkers;
+    });
   }
 
   void _loadData({bool isInitial = false}) async {
@@ -84,37 +176,81 @@ class _MapScreenState extends State<MapScreen> {
     double? lat;
     double? lng;
 
-    // GPS 위치 획득 시도
-    final position = await _getCurrentLocation();
-    if (position != null && position.coords != null) {
-      lat = position.coords!.latitude?.toDouble();
-      lng = position.coords!.longitude?.toDouble();
-      debugPrint('Geolocation_Success: GPS coordinates captured. Lat: $lat, Lng: $lng');
+    // Geolocator로 실시간 GPS 위치 수집
+    final position = await _determinePosition();
+    if (position != null) {
+      lat = position.latitude;
+      lng = position.longitude;
+      _centerLatLng = LatLng(lat, lng);
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(_centerLatLng, 13.0),
+      );
+      debugPrint('Geolocator_Success: GPS coordinates captured. Lat: $lat, Lng: $lng');
     } else {
-      debugPrint('Geolocation_Fallback: Failed to capture GPS. Using default Seoul Center.');
+      debugPrint('Geolocator_Fallback: Failed to capture GPS. Using default Seoul Center.');
     }
 
-    final spots = await MockServices.getEcoTourSpots(latitude: lat, longitude: lng);
-    final price = await MockServices.getAverageFuelPrice();
-    if (mounted) {
-      setState(() {
-        _spots = spots;
-        _fuelPrice = price;
-        _loading = false;
+    if (_appState != null) {
+      _appState!.setTourApiLoading(true);
+      _appState!.setTourApiError(null);
+    }
 
-        // 선택된 스팟이 있으면 새 목록의 동일 스팟(가중치 갱신됨)으로 참조 갱신
-        if (_selectedSpot != null) {
-          try {
-            _selectedSpot = spots.firstWhere((s) => s.name == _selectedSpot!.name);
-          } catch (_) {
-            _selectedSpot = null;
+    try {
+      final spots = await TourApiService().fetchLocationBasedSpots(latitude: lat, longitude: lng);
+      final price = await MockServices.getAverageFuelPrice();
+      
+      // Supabase 주변 제휴 파트너 로드
+      if (_appState != null) {
+        await _appState!.loadNearbyPartners(lat ?? 37.5665, lng ?? 126.9780);
+      }
+
+      if (mounted) {
+        setState(() {
+          _spots = spots;
+          _fuelPrice = price;
+          _loading = false;
+
+          // 선택된 스팟이 있으면 새 목록의 동일 스팟(가중치 갱신됨)으로 참조 갱신
+          if (_selectedSpot != null) {
+            try {
+              _selectedSpot = spots.firstWhere((s) => s.name == _selectedSpot!.name);
+            } catch (_) {
+              _selectedSpot = null;
+            }
           }
+        });
+        if (_appState != null) {
+          _updateMarkers(_appState!);
         }
-      });
+      }
+    } catch (e) {
+      debugPrint('MapScreen_Error: Failed to fetch API data ($e)');
+      if (_appState != null) {
+        _appState!.setTourApiError(e.toString());
+      }
+      final spots = await MockServices.getMockFallbackSpots();
+      final price = await MockServices.getAverageFuelPrice();
+      if (_appState != null) {
+        await _appState!.loadNearbyPartners(lat ?? 37.5665, lng ?? 126.9780);
+      }
+      if (mounted) {
+        setState(() {
+          _spots = spots;
+          _fuelPrice = price;
+          _loading = false;
+        });
+        if (_appState != null) {
+          _updateMarkers(_appState!);
+        }
+      }
+    } finally {
+      if (_appState != null) {
+        _appState!.setTourApiLoading(false);
+      }
     }
   }
 
-  void _simulateTravel(AppState appState, int totalEarned, double co2Reduction) async {
+  void _simulateTravel(AppState appState, int totalEarned, double co2Reduction, double carCost) async {
     setState(() {
       _isTraveling = true;
       _travelProgress = 0.0;
@@ -129,8 +265,28 @@ class _MapScreenState extends State<MapScreen> {
       });
     }
 
+    // Supabase 실서버 trips 테이블 기록 저장
+    if (appState.isLoggedIn) {
+      try {
+        await SupabaseService().saveTrip(
+          userId: appState.userUid.isNotEmpty ? appState.userUid : 'd4090000-0000-0000-0000-0000000000d0',
+          originName: '현 위치',
+          destinationName: _selectedSpot?.name ?? '에코 목적지',
+          distanceKm: _selectedSpot?.distanceKm ?? 0.0,
+          carCost: carCost.round(),
+          publicTransportCost: _selectedSpot?.publicTransitFee ?? 0,
+          savedCost: (carCost - (_selectedSpot?.publicTransitFee ?? 0)).round(),
+          pointsEarned: totalEarned,
+          co2Saved: co2Reduction,
+          isLocalBonus: (_selectedSpot?.name.contains('고양') ?? false) || (_selectedSpot?.name.contains('일산') ?? false),
+        );
+      } catch (e) {
+        debugPrint('MapScreen_Warning: Could not save trip on Supabase: $e');
+      }
+    }
+
     // 적립 완료 처리
-    appState.addPoints(totalEarned, co2Reduction);
+    await appState.addPoints(totalEarned, co2Reduction);
     
     if (mounted) {
       setState(() {
@@ -150,7 +306,44 @@ class _MapScreenState extends State<MapScreen> {
     final appState = Provider.of<AppState>(context);
 
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.greenAccent));
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 지도 스켈레톤
+            Container(
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.02),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.04)),
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(color: Colors.greenAccent),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // 스팟 선택 스켈레톤
+            Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.02),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // 세부 카드 스켈레톤
+            Container(
+              height: 150,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.02),
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     // 머니백 계산식 연동
@@ -195,119 +388,78 @@ class _MapScreenState extends State<MapScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. 에코맵 캔버스 그래픽 위젯 (지도 목업)
+          // 1. 에코맵 구글맵 위젯
           Container(
-            height: 240,
+            height: 300,
             decoration: BoxDecoration(
-              gradient: RadialGradient(
-                colors: [Colors.green[900]!, Colors.black],
-                radius: 1.2,
-              ),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.greenAccent.withOpacity(0.15)),
+              border: Border.all(color: Colors.greenAccent.withOpacity(0.2)),
             ),
-            child: Stack(
-              children: [
-                // 가상 지도 도로망 백그라운드 선형 아트
-                Positioned.fill(
-                  child: Opacity(
-                    opacity: 0.1,
-                    child: CustomPaint(
-                      painter: RoadGridPainter(),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Stack(
+                children: [
+                  GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: _centerLatLng,
+                      zoom: 13.0,
                     ),
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                      _updateMarkers(appState);
+                    },
+                    markers: _markers,
+                    myLocationEnabled: true,
+                    myLocationButtonEnabled: false,
+                    zoomControlsEnabled: true,
                   ),
-                ),
-                // 마커 배치
-                ..._spots.map((spot) {
-                  bool isSelected = _selectedSpot?.name == spot.name;
-                  
-                  // 위경도 스케일 모의 좌표 매핑
-                  double x = 200.0;
-                  double y = 120.0;
-                  if (spot.name.contains('단양')) { x = 280; y = 140; }
-                  if (spot.name.contains('태안')) { x = 110; y = 160; }
-                  if (spot.name.contains('정선')) { x = 320; y = 80; }
-                  if (spot.name.contains('경복궁')) { x = 200; y = 115; }
-
-                  return Positioned(
-                    left: x - 12,
-                    top: y - 24,
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedSpot = spot;
-                        });
-                      },
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isSelected ? Colors.greenAccent : Colors.black87,
-                              border: Border.all(color: Colors.greenAccent),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              spot.name.split(' ').first,
-                              style: TextStyle(
-                                fontSize: 8, 
-                                color: isSelected ? Colors.black : Colors.white,
-                                fontWeight: FontWeight.bold
-                              ),
-                            ),
+                  // 지도 좌측 상단 범례 오버레이
+                  Positioned(
+                    left: 12,
+                    top: 12,
+                    right: 12,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.greenAccent.withOpacity(0.3)),
                           ),
-                          Icon(
-                            Icons.location_on, 
-                            color: isSelected ? Colors.greenAccent : Colors.green[300], 
-                            size: isSelected ? 28 : 22,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-                // 지도 좌측 상단 범례
-                Positioned(
-                  left: 12,
-                  top: 12,
-                  right: 12,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.map, size: 14, color: Colors.greenAccent),
-                          SizedBox(width: 4),
-                          Text('에코 맵 가이드', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: MockServices.isTourApiRealConnected 
-                              ? Colors.blue.withOpacity(0.2) 
-                              : Colors.orange.withOpacity(0.2),
-                          border: Border.all(
-                            color: MockServices.isTourApiRealConnected ? Colors.blueAccent : Colors.orangeAccent,
-                            width: 0.5,
-                          ),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          MockServices.isTourApiRealConnected 
-                              ? '📡 실시간 TourAPI 연동 중' 
-                              : '💻 로컬 모의 데이터 연동 중',
-                          style: TextStyle(
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                            color: MockServices.isTourApiRealConnected ? Colors.blueAccent : Colors.orangeAccent,
+                          child: const Row(
+                            children: [
+                              Icon(Icons.map, size: 14, color: Colors.greenAccent),
+                              SizedBox(width: 6),
+                              Text('실시간 구글맵 연동', style: TextStyle(fontSize: 10, color: Colors.white)),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: TourApiService().isTourApiRealConnected 
+                                ? Colors.blue.withOpacity(0.8) 
+                                : Colors.orange.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            TourApiService().isTourApiRealConnected 
+                                ? '📡 실시간 TourAPI' 
+                                : '💻 로컬 모의 데이터',
+                            style: const TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -496,7 +648,7 @@ class _MapScreenState extends State<MapScreen> {
               )
             ] else
               ElevatedButton(
-                onPressed: () => _simulateTravel(appState, totalReward, co2Reduction),
+                onPressed: () => _simulateTravel(appState, totalReward, co2Reduction, carCost),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.greenAccent,
                   foregroundColor: Colors.black,
@@ -505,6 +657,88 @@ class _MapScreenState extends State<MapScreen> {
                 ),
                 child: const Text('대중교통 여정 개시 및 머니백 적립', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                const Icon(Icons.store, color: Colors.cyanAccent, size: 18),
+                const SizedBox(width: 6),
+                const Text('내 주변 에코 제휴 파트너 (Supabase)', style: TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (appState.nearbyPartners.isEmpty)
+              Card(
+                color: Colors.white.withOpacity(0.01),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(
+                    child: Text('주변 2km 내에 제휴 상점이 없습니다.', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  ),
+                ),
+              )
+            else
+              ...appState.nearbyPartners.map((partner) {
+                final String name = partner['name'] ?? '제휴 파트너';
+                final String category = partner['category'] ?? '';
+                final String address = partner['address'] ?? '';
+                final String description = partner['description'] ?? '';
+                final double distance = double.tryParse(partner['distance_meters']?.toString() ?? '') ?? 0.0;
+                
+                String categoryLabel = '상점';
+                Color categoryColor = Colors.cyan;
+                if (category == 'maintenance') {
+                  categoryLabel = '정비';
+                  categoryColor = Colors.cyan;
+                } else if (category == 'cafe') {
+                  categoryLabel = '카페';
+                  categoryColor = Colors.orangeAccent;
+                }
+
+                return Card(
+                  color: Colors.white.withOpacity(0.02),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: categoryColor.withOpacity(0.1)),
+                  ),
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: categoryColor.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    categoryLabel, 
+                                    style: TextStyle(color: categoryColor, fontSize: 9, fontWeight: FontWeight.bold)
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                              ],
+                            ),
+                            Text('${distance.round()}m', style: TextStyle(fontSize: 11, color: categoryColor, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(address, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                        const SizedBox(height: 4),
+                        Text(description, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
           ],
         ],
       ),

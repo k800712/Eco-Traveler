@@ -14,6 +14,7 @@ interface EcoMapProps {
   setRefundHistory: React.Dispatch<React.SetStateAction<RefundItem[]>>;
   adminFuelPrice: number | null;
   adminRegionWeights: Record<string, number>;
+  mockLocation: { lat: number; lng: number } | null;
 }
 
 export const EcoMap: React.FC<EcoMapProps> = ({
@@ -27,7 +28,8 @@ export const EcoMap: React.FC<EcoMapProps> = ({
   refundHistory,
   setRefundHistory,
   adminFuelPrice,
-  adminRegionWeights
+  adminRegionWeights,
+  mockLocation
 }) => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -44,7 +46,9 @@ export const EcoMap: React.FC<EcoMapProps> = ({
         steps,
         co2Saved,
         completedChallenges,
-        refundHistory
+        refundHistory,
+        mockLatitude: mockLocation ? mockLocation.lat : null,
+        mockLongitude: mockLocation ? mockLocation.lng : null
       };
       
       // 구조화 객체 형태로 postMessage 전송
@@ -64,7 +68,7 @@ export const EcoMap: React.FC<EcoMapProps> = ({
       
       console.log('React -> Flutter: Sent SYNC_STATE & SYNC_ADMIN_SETTINGS message.', { statePayload, adminPayload });
     }
-  }, [points, steps, co2Saved, completedChallenges, refundHistory, adminFuelPrice, adminRegionWeights, iframeLoaded]);
+  }, [points, steps, co2Saved, completedChallenges, refundHistory, adminFuelPrice, adminRegionWeights, mockLocation, iframeLoaded]);
 
   // 2. Flutter Web -> React 수신 메시지 리스너 Effect
   useEffect(() => {

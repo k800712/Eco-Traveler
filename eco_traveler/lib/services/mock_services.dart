@@ -4,31 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
-
-// 관광 스팟 정보 모델
-class TourSpot {
-  final String name;
-  final String region;
-  final String description;
-  final String accessibilityInfo; // 무장애 정보
-  final double regionWeight;      // L: 지역 가중치 (인구 감소 지역 등)
-  final String festivalName;      // 축제 정보
-  final double distanceKm;        // 서울 시청 기준 가상 거리
-  final int tollFee;              // 가상 톨게이트 비
-  final int publicTransitFee;     // 가상 대중교통 요금
-
-  TourSpot({
-    required this.name,
-    required this.region,
-    required this.description,
-    required this.accessibilityInfo,
-    required this.regionWeight,
-    required this.festivalName,
-    required this.distanceKm,
-    required this.tollFee,
-    required this.publicTransitFee,
-  });
-}
+import '../models/tour_spot.dart';
 
 // GPS 기반 지역 코드 매핑 정보 클래스
 class RegionMapping {
@@ -138,7 +114,7 @@ class MockServices {
     if (apiKey == null || apiKey.isEmpty || apiKey.startsWith('MOCK_')) {
       debugPrint('TourAPI_Warning: Valid API Key not found. Falling back to Mock local database.');
       isTourApiRealConnected = false;
-      return _getMockFallbackSpots();
+      return getMockFallbackSpots();
     }
 
     try {
@@ -278,12 +254,12 @@ class MockServices {
     } catch (e) {
       debugPrint('TourAPI_Error: Actual REST API failed ($e). Resorting to local Mock Fallback.');
       isTourApiRealConnected = false;
-      return _getMockFallbackSpots();
+      return getMockFallbackSpots();
     }
   }
 
   // API 장애 및 키 누락 시 안전을 위한 Fallback 모의 데이터 데이터베이스
-  static List<TourSpot> _getMockFallbackSpots() {
+  static List<TourSpot> getMockFallbackSpots() {
     return [
       TourSpot(
         name: '단양 온달동굴',

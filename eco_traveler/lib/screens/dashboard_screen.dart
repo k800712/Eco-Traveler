@@ -12,7 +12,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  bool _isLoggedIn = true; // 가상 로그인 상태
   bool _isWalking = false;
   int _sessionSteps = 0;
   String _pedestrianStatus = '🛑 도보 정지 상태';
@@ -97,61 +96,112 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _isLoggedIn ? '반가워요, 홍길동님! 👋' : '로그인이 필요합니다',
+                    appState.isLoggedIn ? '반가워요, ${appState.userName}님! 👋' : '로그인이 필요합니다',
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   Text(
-                    _isLoggedIn ? '구글 소셜 계정으로 로그인됨' : '간편 소셜 로그인을 진행하세요',
+                    appState.isLoggedIn ? '소셜 계정으로 동기화 로그인됨' : '간편 소셜 로그인을 진행하세요',
                     style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                   ),
                 ],
               ),
               ElevatedButton(
                 onPressed: () {
-                  setState(() {
-                    _isLoggedIn = !_isLoggedIn;
-                  });
+                  if (appState.isLoggedIn) {
+                    appState.logout();
+                  } else {
+                    appState.bypassLogin();
+                  }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _isLoggedIn ? Colors.grey[800] : Colors.green[700],
+                  backgroundColor: appState.isLoggedIn ? Colors.grey[800] : Colors.green[700],
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                child: Text(_isLoggedIn ? '로그아웃' : '간편 로그인', style: const TextStyle(fontSize: 12, color: Colors.white)),
+                child: Text(appState.isLoggedIn ? '로그아웃' : '간편 로그인', style: const TextStyle(fontSize: 12, color: Colors.white)),
               )
             ],
           ),
           const SizedBox(height: 20),
 
-          if (!_isLoggedIn) ...[
+          if (!appState.isLoggedIn) ...[
             // 로그인 유도 카드
             Card(
-              color: Colors.green[900]?.withOpacity(0.4),
+              color: Colors.green[900]?.withOpacity(0.15),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
-                side: BorderSide(color: Colors.green.withOpacity(0.3)),
+                side: BorderSide(color: Colors.greenAccent.withOpacity(0.2)),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
                   children: [
-                    const Icon(Icons.security, size: 48, color: Colors.greenAccent),
+                    const Icon(Icons.stars, size: 48, color: Colors.amberAccent),
                     const SizedBox(height: 12),
-                    const Text('소셜 간편 로그인 필수 연동', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text('1차 심사위원용 데모 로그인', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 8),
                     const Text(
-                      '자차 연비 입력 및 포인트 적립을 시작하려면 간편 로그인을 완료하세요.',
+                      '소셜 로그인 연동 심사 이전에 즉시 시연할 수 있는 심사위원 전용 Bypass 원클릭 로그인을 제공합니다.',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey, fontSize: 12),
                     ),
                     const SizedBox(height: 20),
-                    // 카카오, 네이버, 구글 버튼 모의
+                     // 심사위원 원클릭 로그인 버튼
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        try {
+                          await appState.bypassLogin();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('⚡ Supabase 실서버(grader_demo_supabase) 연동 및 Bypass 로그인이 완료되었습니다!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('❌ Supabase 실서버 연동 실패: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amberAccent,
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      icon: const Icon(Icons.flash_on, color: Colors.black),
+                      label: const Text('심사위원 전용 1초 원클릭 로그인 (Bypass)', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 12),
+                    const Text(
+                      '일반 유저 로그인 데모:',
+                      style: TextStyle(color: Colors.grey, fontSize: 11),
+                    ),
+                    const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _socialButton('구글', Colors.red[700]!),
-                        _socialButton('카카오', Colors.yellow[700]!),
-                        _socialButton('네이버', Colors.green[600]!),
+                        GestureDetector(
+                          onTap: () => appState.bypassLogin(),
+                          child: _socialButton('구글', Colors.red[700]!),
+                        ),
+                        GestureDetector(
+                          onTap: () => appState.bypassLogin(),
+                          child: _socialButton('카카오', Colors.yellow[700]!),
+                        ),
+                        GestureDetector(
+                          onTap: () => appState.bypassLogin(),
+                          child: _socialButton('네이버', Colors.green[600]!),
+                        ),
                       ],
                     ),
                   ],

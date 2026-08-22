@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
+import '../models/tour_spot.dart';
+import '../services/tour_api_service.dart';
 import '../services/mock_services.dart';
 
 class ButlerScreen extends StatefulWidget {
@@ -36,13 +38,25 @@ class _ButlerScreenState extends State<ButlerScreen> with SingleTickerProviderSt
   }
 
   void _loadSpots() async {
-    final spots = await MockServices.getEcoTourSpots();
-    if (mounted) {
-      setState(() {
-        _spots = spots;
-        _currentSpot = spots.first; // 기본값
-        _loading = false;
-      });
+    try {
+      final spots = await TourApiService().fetchLocationBasedSpots();
+      if (mounted) {
+        setState(() {
+          _spots = spots;
+          _currentSpot = spots.isNotEmpty ? spots.first : null;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('ButlerScreen_Error: Failed to load spots from API ($e)');
+      final spots = await MockServices.getMockFallbackSpots();
+      if (mounted) {
+        setState(() {
+          _spots = spots;
+          _currentSpot = spots.isNotEmpty ? spots.first : null;
+          _loading = false;
+        });
+      }
     }
   }
 

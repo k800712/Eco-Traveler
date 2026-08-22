@@ -9,7 +9,7 @@ echo "--------------------------------------------------"
 echo "📦 1. Flutter Web 빌드 구동 중..."
 echo "--------------------------------------------------"
 cd "$PROJECT_ROOT/eco_traveler"
-flutter build web --release
+flutter build web --release --base-href "/flutter_web/"
 
 echo "--------------------------------------------------"
 echo "🧹 2. React public/flutter_web 폴더 갱신..."

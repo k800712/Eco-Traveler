@@ -8,6 +8,8 @@ interface DashboardProps {
   setSteps: React.Dispatch<React.SetStateAction<number>>;
   co2Saved: number;
   setCo2Saved: React.Dispatch<React.SetStateAction<number>>;
+  mockLocation: { lat: number; lng: number } | null;
+  setMockLocation: React.Dispatch<React.SetStateAction<{ lat: number; lng: number } | null>>;
 }
 
 interface GradeConfig {
@@ -34,7 +36,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   steps,
   setSteps,
   co2Saved,
-  setCo2Saved
+  setCo2Saved,
+  mockLocation,
+  setMockLocation
 }) => {
   const [isWalking, setIsWalking] = useState(false);
   const [sessionSteps, setSessionSteps] = useState(0);
@@ -254,6 +258,40 @@ export const Dashboard: React.FC<DashboardProps> = ({
           className="nav-item-hover-effect"
         >
           <span>{currentGrade.icon} {currentGrade.name}</span>
+        </button>
+      </div>
+
+      {/* 고양/일산 GPS 시뮬레이터 배지 단추 */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        <button
+          onClick={() => {
+            if (mockLocation) {
+              setMockLocation(null);
+            } else {
+              setMockLocation({ lat: 37.6584, lng: 126.8320 });
+            }
+          }}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '12px 16px',
+            borderRadius: '16px',
+            fontSize: '12px',
+            fontWeight: '700',
+            cursor: 'pointer',
+            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            border: mockLocation ? '1.5px solid var(--primary-neon)' : '1px solid rgba(255,255,255,0.08)',
+            background: mockLocation ? 'rgba(0, 255, 170, 0.08)' : 'rgba(255,255,255,0.03)',
+            color: mockLocation ? 'var(--primary-neon)' : 'var(--text-muted)',
+            boxShadow: mockLocation ? 'var(--shadow-glow)' : 'none',
+            outline: 'none'
+          }}
+        >
+          <span>📍</span>
+          {mockLocation ? '일산 GPS 시뮬레이션 끄기 (서울 복귀)' : '고양/일산 GPS 시뮬레이션 켜기 (호수공원)'}
         </button>
       </div>
 

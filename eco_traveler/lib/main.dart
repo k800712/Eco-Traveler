@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:universal_html/html.dart' as html;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'providers/app_state.dart';
 import 'services/web_communication.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/butler_screen.dart';
+import 'screens/challenge_screen.dart';
 import 'screens/refund_screen.dart';
 
 Future<void> main() async {
@@ -19,6 +21,35 @@ Future<void> main() async {
     await dotenv.load(fileName: ".env");
   } catch (e) {
     debugPrint("Warning: Could not load .env file: $e");
+  }
+
+  // Google Maps SDK 동적 주입 (Web 타겟일 때만)
+  if (kIsWeb) {
+    try {
+      final String? mapsKey = dotenv.env['GOOGLE_MAPS_API_KEY'];
+      if (mapsKey != null && mapsKey.isNotEmpty) {
+        final existingScript = html.document.querySelector('script[src*="maps.googleapis.com"]');
+        if (existingScript == null) {
+          final html.ScriptElement script = html.ScriptElement()
+            ..src = 'https://maps.googleapis.com/maps/api/js?key=$mapsKey'
+            ..type = 'text/javascript';
+          html.document.head?.append(script);
+          debugPrint("Google Maps SDK script injected successfully.");
+        }
+      }
+    } catch (e) {
+      debugPrint("Error injecting Google Maps SDK: $e");
+    }
+  }
+
+  // Supabase 초기화
+  try {
+    await Supabase.initialize(
+      url: dotenv.env['SUPABASE_URL'] ?? '',
+      anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
+    );
+  } catch (e) {
+    debugPrint("Warning: Could not initialize Supabase: $e");
   }
   
   // 파이어베이스 연동 및 기타 초기화가 실제 키 없이도 통과하도록 연출
@@ -153,6 +184,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     const DashboardScreen(),
     const MapScreen(),
     const ButlerScreen(),
+    const ChallengeScreen(),
     const RefundScreen(),
   ];
 
@@ -210,6 +242,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
             icon: Icon(Icons.psychology),
             activeIcon: Icon(Icons.psychology, color: Color(0xFF10B981)),
             label: 'AI 버틀러',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.stars),
+            activeIcon: Icon(Icons.stars, color: Color(0xFF10B981)),
+            label: '에코 챌린지',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.account_balance_wallet),

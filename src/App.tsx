@@ -13,10 +13,21 @@ function App() {
 
 
   // 모바일 앱 상태 Lift Up
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    const saved = localStorage.getItem('eco_is_logged_in');
+    return saved === 'true';
+  });
+
+  const [mockLocation, setMockLocation] = useState<{ lat: number, lng: number } | null>(null);
+
   const [points, setPoints] = useState<number>(() => {
     const saved = localStorage.getItem('eco_points');
     return saved ? parseInt(saved, 10) : 3500;
   });
+
+  useEffect(() => {
+    localStorage.setItem('eco_is_logged_in', isLoggedIn.toString());
+  }, [isLoggedIn]);
 
   const [steps, setSteps] = useState<number>(() => {
     const saved = localStorage.getItem('eco_steps');
@@ -324,6 +335,10 @@ function App() {
                   setCompletedChallenges={setCompletedChallenges}
                   adminFuelPrice={adminFuelPrice}
                   adminRegionWeights={adminRegionWeights}
+                  isLoggedIn={isLoggedIn}
+                  setIsLoggedIn={setIsLoggedIn}
+                  mockLocation={mockLocation}
+                  setMockLocation={setMockLocation}
                 />
               </div>
             </div>
@@ -437,6 +452,10 @@ function App() {
                   setCompletedChallenges={setCompletedChallenges}
                   adminFuelPrice={adminFuelPrice}
                   adminRegionWeights={adminRegionWeights}
+                  isLoggedIn={isLoggedIn}
+                  setIsLoggedIn={setIsLoggedIn}
+                  mockLocation={mockLocation}
+                  setMockLocation={setMockLocation}
                 />
                 <div 
                   style={{

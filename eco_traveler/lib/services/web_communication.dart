@@ -40,6 +40,8 @@ class WebCommunication {
             final int? points = data['points'];
             final int? steps = data['steps'];
             final double? co2Saved = double.tryParse(data['co2Saved']?.toString() ?? '');
+            final double? mockLatitude = double.tryParse(data['mockLatitude']?.toString() ?? '');
+            final double? mockLongitude = double.tryParse(data['mockLongitude']?.toString() ?? '');
 
             final List<dynamic>? rawCompleted = data['completedChallenges'];
             final List<int> completedChallenges = rawCompleted != null 
@@ -66,8 +68,16 @@ class WebCommunication {
             }
 
             if (points != null && steps != null && co2Saved != null) {
-              debugPrint('WebCommunication: Received SYNC_STATE from React. Points: $points, Steps: $steps, CO2: $co2Saved, CompletedChallenges: $completedChallenges, RefundHistoryCount: ${refundHistory.length}');
-              _appState?.syncState(points, steps, co2Saved, completedChallenges, refundHistory);
+              debugPrint('WebCommunication: Received SYNC_STATE from React. Points: $points, Steps: $steps, CO2: $co2Saved, MockGPS: ($mockLatitude, $mockLongitude)');
+              _appState?.syncState(
+                points, 
+                steps, 
+                co2Saved, 
+                completedChallenges, 
+                refundHistory,
+                mockLatitude: mockLatitude,
+                mockLongitude: mockLongitude,
+              );
             }
           } else if (data['type'] == 'SYNC_ADMIN_SETTINGS') {
             final double? fuelPrice = double.tryParse(data['fuelPrice']?.toString() ?? '');
