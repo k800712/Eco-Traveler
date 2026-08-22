@@ -12,6 +12,8 @@ class ChallengeScreen extends StatefulWidget {
 }
 
 class _ChallengeScreenState extends State<ChallengeScreen> {
+  // 선택한 이미지 XFile 상태 변수
+  XFile? _selectedImage;
   // 선택한 이미지의 바이너리 바이트 정보 (Web/Mobile 하이브리드 호환용)
   Uint8List? _imageBytes;
   // 이미지 파일명 및 임시 로컬 파일 경로 저장
@@ -59,6 +61,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       if (pickedFile != null) {
         final Uint8List bytes = await pickedFile.readAsBytes();
         setState(() {
+          _selectedImage = pickedFile;
           _imageBytes = bytes;
           _imagePath = pickedFile.path;
           _imageName = pickedFile.name;
@@ -147,7 +150,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
   }
 
   void _submitVerification(AppState appState) {
-    if (_activeChallengeId == null || _imageBytes == null) return;
+    if (_activeChallengeId == null || _selectedImage == null) return;
 
     final challenge = _challenges.firstWhere((c) => c['id'] == _activeChallengeId);
     final int points = challenge['reward'];
@@ -164,6 +167,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     );
 
     setState(() {
+      _selectedImage = null;
       _imageBytes = null;
       _imagePath = null;
       _imageName = null;
@@ -228,31 +232,59 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                     const Divider(color: Colors.white10, height: 24),
 
                     // 이미지 프리뷰 오버레이가 들어갈 영역
-                    if (isCurrentActive && _imageBytes != null)
+                    if (isCurrentActive && _selectedImage != null)
                       Center(
                         child: Column(
                           children: [
-                            Container(
-                              width: 140,
-                              height: 140,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: Colors.greenAccent, width: 2),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Colors.black54,
-                                    blurRadius: 10,
-                                    offset: Offset(0, 4),
-                                  )
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: Image.memory(
-                                  _imageBytes!,
-                                  fit: BoxFit.cover,
+                            Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    _selectedImage!.path,
+                                    width: 200,
+                                    height: 150,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        width: 200,
+                                        height: 150,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[900],
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+                                      );
+                                    },
+                                  ),
                                 ),
-                              ),
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedImage = null;
+                                        _imageBytes = null;
+                                        _imagePath = null;
+                                        _imageName = null;
+                                      });
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.close,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 8),
                             Text(
