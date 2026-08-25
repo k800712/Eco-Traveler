@@ -231,114 +231,95 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                     Text('탄소 절감 효과: ${co2}kg CO₂', style: const TextStyle(fontSize: 10, color: Colors.cyanAccent)),
                     const Divider(color: Colors.white10, height: 24),
 
-                    // 이미지 프리뷰 오버레이가 들어갈 영역
-                    if (isCurrentActive && _selectedImage != null)
-                      Center(
-                        child: Column(
-                          children: [
-                            Stack(
+                    // 이미지 프리뷰 또는 사진 인증 유도 영역
+                    (isCurrentActive && _imageBytes != null)
+                        ? Center(
+                            child: Column(
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Image.network(
-                                    _selectedImage!.path,
-                                    width: 200,
-                                    height: 150,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        width: 200,
-                                        height: 150,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[900],
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 4,
-                                  right: 4,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedImage = null;
-                                        _imageBytes = null;
-                                        _imagePath = null;
-                                        _imageName = null;
-                                      });
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
-                                        color: Colors.black54,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.close,
-                                        color: Colors.white,
-                                        size: 16,
+                                Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.memory(
+                                        _imageBytes!,
+                                        width: 250,
+                                        height: 180,
+                                        fit: BoxFit.cover,
                                       ),
                                     ),
-                                  ),
+                                    Positioned(
+                                      top: 4,
+                                      right: 4,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedImage = null;
+                                            _imageBytes = null;
+                                            _imagePath = null;
+                                            _imageName = null;
+                                            _activeChallengeId = null;
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.black54,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.close,
+                                            color: Colors.white,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: () => _showImageSourceBottomSheet(context, id),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        side: const BorderSide(color: Colors.white24),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      icon: const Icon(Icons.sync, size: 14),
+                                      label: const Text('다시 촬영', style: TextStyle(fontSize: 11)),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    ElevatedButton.icon(
+                                      onPressed: () => _submitVerification(appState),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.greenAccent,
+                                        foregroundColor: Colors.black,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      icon: const Icon(Icons.check, size: 14),
+                                      label: const Text('인증 제출하기', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '임시 파일 경로: ${_imagePath ?? ""}',
-                              style: const TextStyle(fontSize: 9, color: Colors.grey, fontFamily: 'monospace'),
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
+                          )
+                        : ElevatedButton.icon(
+                            onPressed: () => _showImageSourceBottomSheet(context, id),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.04),
+                              foregroundColor: Colors.greenAccent,
+                              minimumSize: const Size(double.infinity, 42),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Colors.greenAccent.withOpacity(0.15)),
+                              ),
                             ),
-                            const SizedBox(height: 12),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                OutlinedButton.icon(
-                                  onPressed: () => _showImageSourceBottomSheet(context, id),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    side: const BorderSide(color: Colors.white24),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                  icon: const Icon(Icons.sync, size: 14),
-                                  label: const Text('다시 선택', style: TextStyle(fontSize: 11)),
-                                ),
-                                const SizedBox(width: 12),
-                                ElevatedButton.icon(
-                                  onPressed: () => _submitVerification(appState),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.greenAccent,
-                                    foregroundColor: Colors.black,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                  icon: const Icon(Icons.check, size: 14),
-                                  label: const Text('인증 제출하기', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      // 사진 인증 유도 버튼
-                      ElevatedButton.icon(
-                        onPressed: () => _showImageSourceBottomSheet(context, id),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withOpacity(0.04),
-                          foregroundColor: Colors.greenAccent,
-                          minimumSize: const Size(double.infinity, 42),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(color: Colors.greenAccent.withOpacity(0.15)),
+                            icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                            label: const Text('사진 촬영 및 인증 제출', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ),
-                        ),
-                        icon: const Icon(Icons.camera_alt_outlined, size: 18),
-                        label: const Text('사진 촬영 및 인증 제출', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                      ),
                   ],
                 ),
               ),
