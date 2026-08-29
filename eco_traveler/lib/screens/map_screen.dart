@@ -2,8 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import '../providers/app_state.dart';
 import '../services/mock_services.dart';
@@ -35,10 +34,10 @@ class _MapScreenState extends State<MapScreen> {
   bool _isTraveling = false;
   double _travelProgress = 0.0;
 
-  // 오픈스트리트맵(OSM) 및 위치 상태 변수
-  final MapController _mapController = MapController();
+  // 구글맵 및 위치 상태 변수
+  GoogleMapController? _googleMapController;
   LatLng _centerLatLng = const LatLng(37.5665, 126.9780); // 서울 시청 디폴트
-  List<Marker> _markers = [];
+  Set<Marker> _markers = {};
 
   @override
   void initState() {
@@ -93,38 +92,21 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // 동적 마커 갱신 루틴 (오픈스트리트맵 위젯 지원용)
+  // 동적 마커 갱신 루틴 (구글맵 위젯 지원용)
   void _updateMarkers(AppState appState) {
-    final List<Marker> newMarkers = [];
+    final Set<Marker> newMarkers = {};
 
-    // 1. 사용자 현재 위치 마커 (초록색 사람 모양)
+    // 1. 사용자 현재 위치 마커 (파란색 핀)
     newMarkers.add(
       Marker(
-        point: _centerLatLng,
-        width: 50,
-        height: 50,
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.green[800],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.greenAccent),
-              ),
-              child: const Text('내 위치', style: TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
-            const Icon(
-              Icons.person_pin_circle,
-              color: Colors.greenAccent,
-              size: 30,
-            ),
-          ],
-        ),
+        markerId: const MarkerId('my_location'),
+        position: _centerLatLng,
+        infoWindow: const InfoWindow(title: '내 위치'),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
       ),
     );
 
-    // 2. 관광 스팟 마커 (녹색 핀)
+    // 2. 관광 스팟 마커 (선택 시 초록색, 비선택 시 빨간색 핀)
     for (var spot in _spots) {
       double x = 126.9780;
       double y = 37.5665;
@@ -138,93 +120,41 @@ class _MapScreenState extends State<MapScreen> {
 
       newMarkers.add(
         Marker(
-          point: LatLng(y, x),
-          width: 70,
-          height: 70,
-          child: GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedSpot = spot;
-              });
-            },
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isSelected ? Colors.greenAccent : Colors.black87,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.greenAccent),
-                  ),
-                  child: Text(
-                    spot.name.split(' ').first,
-                    style: TextStyle(
-                      fontSize: 8,
-                      color: isSelected ? Colors.black : Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Icon(
-                  Icons.location_on,
-                  color: isSelected ? Colors.greenAccent : Colors.green[300],
-                  size: isSelected ? 30 : 22,
-                ),
-              ],
-            ),
+          markerId: MarkerId('spot_${spot.name}'),
+          position: LatLng(y, x),
+          infoWindow: InfoWindow(title: spot.name, snippet: spot.region),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            isSelected ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueRed,
           ),
+          onTap: () {
+            setState(() {
+              _selectedSpot = spot;
+            });
+            // 선택 스팟 변경 시 마커 정보 실시간 업데이트
+            _updateMarkers(appState);
+          },
         ),
       );
     }
 
-    // 3. Supabase 제휴 파트너 마커 (정비소: 주황색, 카페: 시안색)
+    // 3. Supabase 제휴 파트너 마커 (정비소: 주황색, 카페: 시안색 핀)
     for (var partner in appState.nearbyPartners) {
       final String name = partner['name'] ?? '제휴 파트너';
       final String category = partner['category'] ?? '';
       final double plat = double.tryParse(partner['latitude']?.toString() ?? '') ?? (_centerLatLng.latitude + 0.002);
       final double plng = double.tryParse(partner['longitude']?.toString() ?? '') ?? (_centerLatLng.longitude + 0.002);
 
-      IconData icon = Icons.store;
-      Color markerColor = Colors.orangeAccent;
-      if (category == 'maintenance') {
-        icon = Icons.build;
-        markerColor = Colors.orangeAccent; // 주황색 정비소
-      } else if (category == 'cafe') {
-        icon = Icons.local_cafe;
-        markerColor = Colors.cyanAccent;   // 시안색 카페
+      double hue = BitmapDescriptor.hueOrange;
+      if (category == 'cafe') {
+        hue = BitmapDescriptor.hueCyan;
       }
 
       newMarkers.add(
         Marker(
-          point: LatLng(plat, plng),
-          width: 65,
-          height: 65,
-          child: Tooltip(
-            message: '$name\n${partner['description'] ?? ""}',
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    border: Border.all(color: markerColor),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    name.split(' ').first,
-                    style: TextStyle(fontSize: 7, color: markerColor, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Icon(
-                  icon,
-                  color: markerColor,
-                  size: 20,
-                ),
-              ],
-            ),
-          ),
+          markerId: MarkerId('partner_${partner['id'] ?? name}'),
+          position: LatLng(plat, plng),
+          infoWindow: InfoWindow(title: name, snippet: partner['description']),
+          icon: BitmapDescriptor.defaultMarkerWithHue(hue),
         ),
       );
     }
@@ -250,8 +180,10 @@ class _MapScreenState extends State<MapScreen> {
       lat = position.latitude;
       lng = position.longitude;
       _centerLatLng = LatLng(lat, lng);
-      // OSM 지도의 카메라 위치 이동
-      _mapController.move(_centerLatLng, 13.0);
+      // 구글맵 카메라 위치 이동
+      _googleMapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(_centerLatLng, 13.0),
+      );
       debugPrint('Geolocator_Success: GPS coordinates captured. Lat: $lat, Lng: $lng');
     } else {
       debugPrint('Geolocator_Fallback: Failed to capture GPS. Using default Seoul Center.');
@@ -466,25 +398,16 @@ class _MapScreenState extends State<MapScreen> {
               borderRadius: BorderRadius.circular(24),
               child: Stack(
                 children: [
-                  FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: _centerLatLng,
-                      initialZoom: 13.0,
-                      onMapReady: () {
-                        _updateMarkers(appState);
-                      },
+                  GoogleMap(
+                    initialCameraPosition: CameraPosition(
+                      target: _centerLatLng,
+                      zoom: 13.0,
                     ),
-                    children: [
-                      TileLayer(
-                        urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                        subdomains: const ['a', 'b', 'c', 'd'],
-                        userAgentPackageName: 'com.aimhigh.eco_traveler',
-                      ),
-                      MarkerLayer(
-                        markers: _markers,
-                      ),
-                    ],
+                    markers: _markers,
+                    onMapCreated: (GoogleMapController controller) {
+                      _googleMapController = controller;
+                      _updateMarkers(appState);
+                    },
                   ),
                   // 지도 좌측 상단 범례 오버레이
                   Positioned(
@@ -505,7 +428,7 @@ class _MapScreenState extends State<MapScreen> {
                             children: [
                               Icon(Icons.map, size: 14, color: Colors.greenAccent),
                               SizedBox(width: 6),
-                              Text('실시간 OpenStreetMap 연동', style: TextStyle(fontSize: 10, color: Colors.white)),
+                              Text('실시간 Google Maps 연동', style: TextStyle(fontSize: 10, color: Colors.white)),
                             ],
                           ),
                         ),
